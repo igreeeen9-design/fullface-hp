@@ -319,6 +319,11 @@ img { max-width: 100%; display: block; }
   font-weight: 700;
 }
 
+.result-draw {
+  color: var(--navy);
+  font-weight: 700;
+}
+
 .results-table tfoot td {
   background: var(--off-white);
   font-weight: 700;
@@ -443,6 +448,16 @@ img { max-width: 100%; display: block; }
 .linescore-total {
   font-weight: 800;
   background: #fff;
+}
+
+.boxscore th, .boxscore td {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.boxscore {
+  min-width: 900px;
 }
 
 /* Footer */
