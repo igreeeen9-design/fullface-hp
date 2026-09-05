@@ -3,6 +3,8 @@
   --navy-dark: #0a1730;
   --accent: #1c2f57;
   --accent-light: #2b4680;
+  --red: #c8102e;
+  --red-light: #e8394f;
   --pinstripe: rgba(255, 255, 255, 0.16);
   --silver: #c4ced4;
   --off-white: #f4f6f7;
@@ -180,10 +182,40 @@ img { max-width: 100%; display: block; }
 .hero h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.8rem, 8vw, 5rem);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  font-size: clamp(3.4rem, 11vw, 6.5rem);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+  animation: hero-title-in 0.8s ease-out;
+}
+
+.hero-title-main,
+.hero-title-accent {
+  display: inline-block;
+}
+
+.hero-title-main {
+  color: #fff;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.15),
+    0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.hero-title-accent {
+  margin-left: 0.22em;
+  background: linear-gradient(180deg, var(--red-light) 0%, var(--red) 65%, #8c0c22 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 6px 18px rgba(200, 16, 46, 0.45));
+  position: relative;
+}
+
+@keyframes hero-title-in {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .hero-copy {
