@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理画面 | FULL FACE</title>
+<link rel="icon" href="images/logo2-favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .admin-header {
+    background: var(--navy);
+    color: #fff;
+    padding: 1rem 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .admin-header a {
+    color: #fff;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .admin-header span {
+    color: var(--silver);
+    font-size: 0.85rem;
+  }
+  .admin-main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 1.2rem 1rem 5rem;
+  }
+  .admin-card {
+    background: #fff;
+    border: 1px solid #dde3e6;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 1.3rem 1.2rem;
+    margin-bottom: 1.4rem;
+  }
+  .admin-card h2 {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+    color: var(--navy);
+    font-weight: 800;
+  }
+  .admin-card p.admin-note {
+    color: #6b7680;
+    font-size: 0.85rem;
+    margin: 0.3rem 0 1rem;
+    line-height: 1.6;
+  }
+  .field {
+    margin-bottom: 1rem;
+  }
+  .field label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 0.35rem;
+  }
+  .field input,
+  .field textarea {
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    font-size: 1rem;
+    border: 1px solid #c9d0d4;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .field input:focus {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 1px;
+  }
+  .lineup-row, .bench-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+  .row-order {
+    flex: 0 0 2.2rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--accent-light);
+    text-align: center;
+    font-size: 0.95rem;
+  }
+  .lineup-row input.name-input {
+    flex: 1.4;
+  }
+  .lineup-row input.pos-input {
+    flex: 0.8;
+  }
+  .bench-row input {
+    flex: 1;
+  }
+  .row-btn {
+    flex: 0 0 auto;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 8px;
+    border: 1px solid #c9d0d4;
+    background: #fff;
+    color: var(--navy);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .row-btn.danger {
+    color: var(--red);
+    border-color: var(--red-light);
+  }
+  .add-row-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--off-white);
+    border: 1px dashed #b7c0c5;
+    color: var(--navy);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: 100%;
+    justify-content: center;
+  }
+  .admin-actions {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(244,246,247,0), var(--off-white) 30%);
+    padding: 1rem 0 0.5rem;
+    display: grid;
+    gap: 0.7rem;
+  }
+  .admin-btn {
+    display: block;
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 1rem;
+    border: 2px solid transparent;
+    cursor: pointer;
+    text-align: center;
+  }
+  .admin-btn-primary {
+    background: var(--accent-light);
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(43, 70, 128, 0.45);
+  }
+  .admin-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .admin-btn-outline {
+    background: #fff;
+    border-color: var(--red-light);
+    color: var(--red);
+  }
+  .admin-btn-link {
+    background: none;
+    border: none;
+    color: var(--accent-light);
+    font-size: 0.85rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+  }
+  #statusMsg {
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    display: none;
+  }
+  #statusMsg.ok {
+    display: block;
+    background: #e6f4ea;
+    color: #1a6b3c;
+  }
+  #statusMsg.err {
+    display: block;
+    background: #fbe7e9;
+    color: #b0243a;
+  }
+  #statusMsg.loading {
+    display: block;
+    background: #eef1f4;
+    color: var(--navy);
+  }
+  .token-connected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #eef7ee;
+    color: #1a6b3c;
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<header class="admin-header">
+  <a href="index.html">FULL FACE</a>
+  <span>管理画面</span>
+</header>
+
+<main class="admin-main">
+
+  <div id="statusMsg"></div>
+
+  <section class="admin-card">
+    <h2>GitHub連携</h2>
+    <p class="admin-note">
+      次戦情報はGitHub上の <code>data/next-game.json</code> を書き換えることでサイトに反映されます。
+      初回のみ、書き込み用のアクセストークンをこの画面に登録してください(下の「初めて使う方へ」を参照)。
+      トークンはこの端末のブラウザだけに保存され、他には送信されません。
+    </p>
+    <div id="tokenConnected" class="token-connected" style="display:none;">
+      <span>🔗 接続済みです</span>
+      <button type="button" class="admin-btn-link" id="changeTokenBtn">トークンを変更</button>
+    </div>
+    <div id="tokenForm">
+      <div class="field">
+        <label for="tokenInput">GitHubアクセストークン</label>
+        <input type="password" id="tokenInput" autocomplete="off" placeholder="github_pat_xxxxxxxx...">
+      </div>
+      <button type="button" class="admin-btn admin-btn-primary" id="saveTokenBtn" style="margin-bottom:0.5rem;">この端末に保存して接続</button>
+    </div>
+    <details style="margin-top:0.8rem; font-size:0.85rem; color:#6b7680;">
+      <summary style="cursor:pointer; font-weight:700; color:var(--navy);">初めて使う方へ(トークンの作り方)</summary>
+      <ol style="padding-left:1.2rem; line-height:1.8; margin:0.6rem 0 0;">
+        <li>GitHubにログインし、右上のアイコン→Settings→左下の Developer settings を開く</li>
+        <li>Personal access tokens → Fine-grained tokens → Generate new token</li>
+        <li>Repository access は「Only select repositories」で <code>fullface-hp</code> を選択</li>
+        <li>Permissions → Contents を「Read and write」に設定</li>
+        <li>Generate token を押し、表示された文字列(<code>github_pat_...</code>)をコピーして上の欄に貼り付け、保存</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="admin-card">
+    <h2>次戦の基本情報</h2>
+    <div class="field">
+      <label for="opponentInput">対戦相手</label>
+      <input type="text" id="opponentInput" placeholder="例: Pana Spirits">
+    </div>
+    <div class="field">
+      <label for="dateInput">試合日</label>
+      <input type="date" id="dateInput">
+    </div>
+    <div class="field">
+      <label for="startTimeInput">試合開始時刻</label>
+      <input type="time" id="startTimeInput">
+    </div>
+    <div class="field">
+      <label for="meetTimeInput">集合時間</label>
+      <input type="time" id="meetTimeInput">
+    </div>
+    <div class="field">
+      <label for="locationInput">試合会場</label>
+      <input type="text" id="locationInput" placeholder="例: 北谷運動公園">
+    </div>
+  </section>
+
+  <section class="admin-card">
+    <h2>スタメン(打順)</h2>
+    <p class="admin-note">基本は10人打ちですが、9人や11〜12人にも対応できます。行を追加・削除して人数を調整してください。</p>
+    <datalist id="positionOptions">
+      <option value="投"></option><option value="捕"></option><option value="一"></option><option value="二"></option>
+      <option value="三"></option><option value="遊"></option><option value="左"></option><option value="中"></option>
+      <option value="右"></option><option value="指"></option>
+    </datalist>
+    <div id="lineupRows"></div>
+    <button type="button" class="add-row-btn" id="addLineupBtn">+ 選手を追加</button>
+  </section>
+
+  <section class="admin-card">
+    <h2>ベンチメンバー</h2>
+    <div id="benchRows"></div>
+    <button type="button" class="add-row-btn" id="addBenchBtn">+ 追加</button>
+  </section>
+
+  <div class="admin-actions">
+    <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">保存する</button>
+    <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
+  </div>
+
+</main>
+
+<script>
+const CONFIG = {
+  owner: 'igreeeen9-design',
+  repo: 'fullface-hp',
+  path: 'data/next-game.json',
+  branch: 'main',
+};
+const TOKEN_KEY = 'ffhp_admin_token';
+
+let state = { sha: null, data: null };
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+function setToken(t) {
+  localStorage.setItem(TOKEN_KEY, t);
+}
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
+}
+function base64ToUtf8(b64) {
+  const binary = atob(b64.replace(/\n/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('statusMsg');
+  el.className = type;
+  el.textContent = msg;
+}
+function clearStatus() {
+  const el = document.getElementById('statusMsg');
+  el.className = '';
+  el.textContent = '';
+}
+
+function apiUrl() {
+  return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}?ref=${CONFIG.branch}`;
+}
+
+async function ghGet() {
+  const res = await fetch(apiUrl(), {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`読み込みに失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  return json;
+}
+
+async function ghPut(newDataObj, message) {
+  const content = utf8ToBase64(JSON.stringify(newDataObj, null, 2));
+  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message,
+      content,
+      sha: state.sha,
+      branch: CONFIG.branch,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`保存に失敗しました (HTTP ${res.status}) ${body.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  state.sha = json.content.sha;
+  return json;
+}
+
+function makeLineupRow(name, position) {
+  const row = document.createElement('div');
+  row.className = 'lineup-row';
+  row.innerHTML = `
+    <div class="row-order"></div>
+    <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(name || '')}">
+    <input type="text" class="pos-input" list="positionOptions" placeholder="守備" value="${escapeAttr(position || '')}">
+    <button type="button" class="row-btn" data-act="up" title="上へ">▲</button>
+    <button type="button" class="row-btn" data-act="down" title="下へ">▼</button>
+    <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
+  `;
+  wireRowButtons(row, 'lineupRows');
+  return row;
+}
+
+function makeBenchRow(name) {
+  const row = document.createElement('div');
+  row.className = 'bench-row';
+  row.innerHTML = `
+    <input type="text" placeholder="選手名" value="${escapeAttr(name || '')}">
+    <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
+  `;
+  wireRowButtons(row, 'benchRows');
+  return row;
+}
+
+function wireRowButtons(row, containerId) {
+  row.querySelectorAll('button[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const container = document.getElementById(containerId);
+      const act = btn.dataset.act;
+      if (act === 'del') {
+        row.remove();
+      } else if (act === 'up' && row.previousElementSibling) {
+        container.insertBefore(row, row.previousElementSibling);
+      } else if (act === 'down' && row.nextElementSibling) {
+        container.insertBefore(row.nextElementSibling, row);
+      }
+      renumberLineup();
+    });
+  });
+}
+
+function renumberLineup() {
+  const rows = document.querySelectorAll('#lineupRows .lineup-row');
+  rows.forEach((row, i) => {
+    row.querySelector('.row-order').textContent = `${i + 1}番`;
+  });
+}
+
+function escapeAttr(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function renderLineup(lineup) {
+  const container = document.getElementById('lineupRows');
+  container.innerHTML = '';
+  const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', position: '' }));
+  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.position)));
+  renumberLineup();
+}
+
+function renderBench(bench) {
+  const container = document.getElementById('benchRows');
+  container.innerHTML = '';
+  (bench || []).forEach((name) => container.appendChild(makeBenchRow(name)));
+}
+
+function fillForm(current) {
+  document.getElementById('opponentInput').value = current.opponent || '';
+  document.getElementById('dateInput').value = current.date || '';
+  document.getElementById('startTimeInput').value = current.startTime || '';
+  document.getElementById('meetTimeInput').value = current.meetTime || '';
+  document.getElementById('locationInput').value = current.location || '';
+  renderLineup(current.lineup || []);
+  renderBench(current.bench || []);
+}
+
+function collectForm() {
+  const lineup = Array.from(document.querySelectorAll('#lineupRows .lineup-row')).map((row, i) => ({
+    order: i + 1,
+    name: row.querySelector('.name-input').value.trim(),
+    position: row.querySelector('.pos-input').value.trim(),
+  })).filter((p) => p.name || p.position);
+
+  const bench = Array.from(document.querySelectorAll('#benchRows .bench-row input')).map((inp) => inp.value.trim()).filter(Boolean);
+
+  return {
+    opponent: document.getElementById('opponentInput').value.trim(),
+    date: document.getElementById('dateInput').value,
+    startTime: document.getElementById('startTimeInput').value,
+    meetTime: document.getElementById('meetTimeInput').value,
+    location: document.getElementById('locationInput').value.trim(),
+    lineup,
+    bench,
+  };
+}
+
+async function loadData() {
+  showStatus('loading', '読み込み中...');
+  try {
+    const json = await ghGet();
+    state.sha = json.sha;
+    state.data = JSON.parse(base64ToUtf8(json.content));
+    if (!state.data.history) state.data.history = [];
+    if (!state.data.current) state.data.current = {};
+    fillForm(state.data.current);
+    clearStatus();
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  }
+}
+
+async function saveCurrent() {
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  showStatus('loading', '保存中...');
+  try {
+    const current = collectForm();
+    current.updatedAt = new Date().toISOString();
+    const newData = { current, history: (state.data && state.data.history) || [] };
+    await ghPut(newData, '次戦情報を更新');
+    state.data = newData;
+    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function archiveAndClear() {
+  if (!confirm('現在の次戦情報を履歴に保存し、フォームを空にします。よろしいですか?')) return;
+  const btn = document.getElementById('archiveBtn');
+  btn.disabled = true;
+  showStatus('loading', '履歴に保存中...');
+  try {
+    const current = collectForm();
+    current.updatedAt = new Date().toISOString();
+    const history = (state.data && state.data.history) || [];
+    const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
+    const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], updatedAt: new Date().toISOString() };
+    const newData = { current: blankCurrent, history: newHistory };
+    await ghPut(newData, '試合終了: 次戦情報を履歴に保存してクリア');
+    state.data = newData;
+    fillForm(blankCurrent);
+    showStatus('ok', '履歴に保存し、フォームをクリアしました。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function refreshTokenUI() {
+  const has = !!getToken();
+  document.getElementById('tokenConnected').style.display = has ? 'flex' : 'none';
+  document.getElementById('tokenForm').style.display = has ? 'none' : 'block';
+}
+
+document.getElementById('saveTokenBtn').addEventListener('click', () => {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val) return;
+  setToken(val);
+  refreshTokenUI();
+  loadData();
+});
+
+document.getElementById('changeTokenBtn').addEventListener('click', () => {
+  clearToken();
+  refreshTokenUI();
+  clearStatus();
+});
+
+document.getElementById('addLineupBtn').addEventListener('click', () => {
+  document.getElementById('lineupRows').appendChild(makeLineupRow('', ''));
+  renumberLineup();
+});
+
+document.getElementById('addBenchBtn').addEventListener('click', () => {
+  document.getElementById('benchRows').appendChild(makeBenchRow(''));
+});
+
+document.getElementById('saveBtn').addEventListener('click', saveCurrent);
+document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);
+
+refreshTokenUI();
+if (getToken()) {
+  loadData();
+} else {
+  renderLineup([]);
+}
+</script>
+</body>
+</html>
