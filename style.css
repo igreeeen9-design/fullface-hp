@@ -406,6 +406,7 @@ img { max-width: 100%; display: block; }
   margin: 0;
   font-weight: 700;
   font-size: 1.05rem;
+  overflow-wrap: break-word;
 }
 
 /* Tables */
@@ -643,13 +644,13 @@ img { max-width: 100%; display: block; }
 }
 
 .next-game-meta {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.4rem;
 }
 
 @media (min-width: 620px) {
   .next-game-meta {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -663,6 +664,10 @@ img { max-width: 100%; display: block; }
 
 .next-game-lineup h3 {
   font-size: 1.35rem;
+}
+
+.lineup-table {
+  min-width: 0;
 }
 
 .lineup-table td:first-child {
