@@ -266,6 +266,86 @@ function renderResults(container, resultsData) {
   container.innerHTML = groupsHtml + totalHtml;
 }
 
+/* シーズン合計成績: 各試合のボックススコア(既存データ)を選手ごとに合算する。
+   打席数(PA)は犠打・犠飛が記録されていないため正確に算出できず表示しない。
+   打率・出塁率・長打率は既存の1試合ごとの数値と同じ式(打率=安打/打数、
+   出塁率=(安打+四球+死球)/(打数+四球+死球)、長打率=塁打/打数)で算出しており、
+   このサイトの既存データと矛盾しないことを確認済み。 */
+function formatRate(numerator, denominator) {
+  if (!denominator) return '-';
+  const value = numerator / denominator;
+  const s = Math.abs(value).toFixed(3);
+  const body = s.startsWith('0.') ? s.slice(1) : s;
+  return (value < 0 ? '-' : '') + body;
+}
+
+function aggregateBoxscoreSeason(group) {
+  const totals = {};
+  const order = [];
+  (group.games || []).forEach((game) => {
+    const d = game.detail;
+    if (!d || d.type !== 'boxscore') return;
+    const idx = {};
+    (d.headers || []).forEach((h, i) => { idx[h] = i; });
+    const required = ['選手名', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '打点', '得点', '三振', '四球', '死球'];
+    if (required.some((key) => !(key in idx))) return;
+    (d.rows || []).forEach((row) => {
+      const name = row[idx['選手名']];
+      if (!name) return;
+      if (!totals[name]) {
+        totals[name] = { name, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0 };
+        order.push(name);
+      }
+      const t = totals[name];
+      const num = (key) => { const v = row[idx[key]]; return (v === '-' || v == null) ? 0 : (Number(v) || 0); };
+      t.AB += num('打数'); t.H += num('安打'); t.B1 += num('単打'); t.B2 += num('二塁打');
+      t.B3 += num('三塁打'); t.HR += num('本塁打'); t.RBI += num('打点'); t.Runs += num('得点');
+      t.SO += num('三振'); t.BB += num('四球'); t.HBP += num('死球');
+    });
+  });
+  return order.map((name) => totals[name]).sort((a, b) => (b.AB - a.AB) || (b.H - a.H));
+}
+
+function renderSeasonTotalsTable(rows) {
+  if (!rows.length) return '';
+  const body = rows.map((p) => {
+    const totalBases = p.B1 + p.B2 * 2 + p.B3 * 3 + p.HR * 4;
+    const avg = formatRate(p.H, p.AB);
+    const obp = formatRate(p.H + p.BB + p.HBP, p.AB + p.BB + p.HBP);
+    const slg = formatRate(totalBases, p.AB);
+    return `
+            <tr>
+              <td>${escapeHtml(p.name)}</td>
+              <td>${p.AB}</td>
+              <td>${p.H}</td>
+              <td>${p.B2}</td>
+              <td>${p.B3}</td>
+              <td>${p.HR}</td>
+              <td>${p.RBI}</td>
+              <td>${p.Runs}</td>
+              <td>${p.BB}</td>
+              <td>${p.HBP}</td>
+              <td>${p.SO}</td>
+              <td>${avg}</td>
+              <td>${obp}</td>
+              <td>${slg}</td>
+            </tr>`;
+  }).join('');
+  return `
+      <div class="table-wrap">
+        <table class="data-table season-totals">
+          <thead>
+            <tr>
+              <th>選手名</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>打点</th><th>得点</th><th>四球</th><th>死球</th><th>三振</th>
+              <th>打率</th><th>出塁率</th><th>長打率</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+}
+
 function renderHistory(container, resultsData, statsData, statsFailed) {
   const groups = (resultsData && Array.isArray(resultsData.groups))
     ? resultsData.groups.filter((g) => g.era === 'history') : [];
@@ -286,6 +366,13 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
       ${renderRankingGrid(ranking.categories)}`;
     } else if (statsFailed) {
       html += '<p class="placeholder-note">個人成績ランキングの読み込みに失敗しました。</p>';
+    }
+    const seasonRows = aggregateBoxscoreSeason(g);
+    if (seasonRows.length) {
+      html += `
+      <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
+      <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
+      ${renderSeasonTotalsTable(seasonRows)}`;
     }
     return html;
   });
