@@ -655,7 +655,8 @@ img { max-width: 100%; display: block; }
 }
 
 .next-game-lineup h3,
-.next-game-bench h3 {
+.next-game-bench h3,
+.next-game-note h3 {
   margin: 0 0 0.8rem;
   font-size: 1rem;
   color: var(--navy);
@@ -695,6 +696,22 @@ img { max-width: 100%; display: block; }
   font-weight: 600;
   color: var(--navy);
   box-shadow: var(--shadow-sm);
+}
+
+.next-game-note {
+  background: #fff;
+  border: 1px solid #dde3e6;
+  border-left: 4px solid var(--red-light);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.3rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.next-game-note p {
+  margin: 0;
+  color: var(--navy);
+  line-height: 1.8;
+  overflow-wrap: break-word;
 }
 
 .next-game-updated {

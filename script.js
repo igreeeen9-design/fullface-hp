@@ -104,6 +104,11 @@ function renderNextGame(container, data) {
       <h3>ベンチメンバー</h3>
       <ul class="bench-list">${benchItems}</ul>
     </div>
+    ${g.note ? `
+    <div class="next-game-note">
+      <h3>監督から一言・連絡事項</h3>
+      <p>${escapeHtml(g.note).replace(/\n/g, '<br>')}</p>
+    </div>` : ''}
     ${g.updatedAt ? `<p class="next-game-updated">最終更新: ${escapeHtml(formatUpdatedAt(g.updatedAt))}</p>` : ''}
   `;
 }

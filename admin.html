@@ -295,6 +295,14 @@
     <button type="button" class="add-row-btn" id="addBenchBtn">+ 追加</button>
   </section>
 
+  <section class="admin-card">
+    <h2>監督から一言・連絡事項</h2>
+    <p class="admin-note">任意入力です。空欄の場合、サイトには表示されません。</p>
+    <div class="field">
+      <textarea id="noteInput" rows="4" placeholder="例: 雨天中止の場合は前日20時までにグループLINEで連絡します"></textarea>
+    </div>
+  </section>
+
   <div class="admin-actions">
     <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">保存する</button>
     <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
@@ -471,6 +479,7 @@ function fillForm(current) {
   document.getElementById('locationInput').value = current.location || '';
   renderLineup(current.lineup || []);
   renderBench(current.bench || []);
+  document.getElementById('noteInput').value = current.note || '';
 }
 
 function collectForm() {
@@ -490,6 +499,7 @@ function collectForm() {
     location: document.getElementById('locationInput').value.trim(),
     lineup,
     bench,
+    note: document.getElementById('noteInput').value.trim(),
   };
 }
 
@@ -536,7 +546,7 @@ async function archiveAndClear() {
     current.updatedAt = new Date().toISOString();
     const history = (state.data && state.data.history) || [];
     const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
-    const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], updatedAt: new Date().toISOString() };
+    const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     const newData = { current: blankCurrent, history: newHistory };
     await ghPut(newData, '試合終了: 次戦情報を履歴に保存してクリア');
     state.data = newData;
