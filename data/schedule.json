@@ -1,0 +1,22 @@
+{
+  "games": [
+    {
+      "date": "2026-09-13",
+      "opponent": "Pana Spirits",
+      "location": "北谷運動公園",
+      "time": "9:00"
+    },
+    {
+      "date": "2026-09-27",
+      "opponent": "六本松 BLACK SOX",
+      "location": "駕与丁公園",
+      "time": "8:00"
+    },
+    {
+      "date": null,
+      "opponent": "Blue Bandits",
+      "location": null,
+      "time": null
+    }
+  ]
+}

@@ -64,7 +64,8 @@
     margin-bottom: 0.35rem;
   }
   .field input,
-  .field textarea {
+  .field textarea,
+  .field select {
     width: 100%;
     padding: 0.7rem 0.8rem;
     font-size: 1rem;
@@ -74,7 +75,8 @@
     color: var(--ink);
     font-family: inherit;
   }
-  .field input:focus {
+  .field input:focus,
+  .field select:focus {
     outline: 2px solid var(--accent-light);
     outline-offset: 1px;
   }
@@ -210,6 +212,104 @@
     font-size: 0.88rem;
     font-weight: 700;
   }
+
+  /* ---- タブ切り替え ---- */
+  .admin-tabs {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.2rem;
+  }
+  .admin-tab-btn {
+    flex: 0 0 auto;
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    border: 1px solid #c9d0d4;
+    background: #fff;
+    color: var(--navy);
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .admin-tab-btn.active {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+  .admin-tab-panel[hidden] {
+    display: none;
+  }
+
+  /* ---- 試合日程・試合結果・選手名簿の行編集 ---- */
+  .entry-row {
+    border: 1px solid #dde3e6;
+    border-radius: 10px;
+    padding: 0.8rem 0.9rem;
+    margin-bottom: 0.7rem;
+    background: var(--off-white);
+  }
+  .entry-row-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .entry-row-grid.cols-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .entry-row-grid label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #6b7680;
+    margin-bottom: 0.25rem;
+  }
+  .entry-row-grid input,
+  .entry-row-grid select {
+    width: 100%;
+    padding: 0.55rem 0.6rem;
+    font-size: 0.92rem;
+    border: 1px solid #c9d0d4;
+    border-radius: 7px;
+    background: #fff;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .entry-row-score {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .entry-row-score input {
+    text-align: center;
+  }
+  .entry-row-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.6rem;
+  }
+  .entry-row-badge {
+    font-size: 0.75rem;
+    color: var(--accent-light);
+    font-weight: 700;
+  }
+  .roster-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+  .roster-row input.number-input { flex: 0 0 4.2rem; }
+  .roster-row input.name-input { flex: 1.3; }
+  .roster-row input.position-input { flex: 1.3; }
+  .new-group-form {
+    border: 1px dashed #b7c0c5;
+    border-radius: 10px;
+    padding: 0.9rem;
+    margin-top: 0.8rem;
+  }
 </style>
 </head>
 <body>
@@ -226,7 +326,7 @@
   <section class="admin-card">
     <h2>GitHub連携</h2>
     <p class="admin-note">
-      次戦情報はGitHub上の <code>data/next-game.json</code> を書き換えることでサイトに反映されます。
+      この画面での変更はGitHub上の <code>data/</code> フォルダ内のファイルを書き換えることでサイトに反映されます。
       初回のみ、書き込み用のアクセストークンをこの画面に登録してください(下の「初めて使う方へ」を参照)。
       トークンはこの端末のブラウザだけに保存され、他には送信されません。
     </p>
@@ -253,59 +353,125 @@
     </details>
   </section>
 
-  <section class="admin-card">
-    <h2>次戦の基本情報</h2>
-    <div class="field">
-      <label for="opponentInput">対戦相手</label>
-      <input type="text" id="opponentInput" placeholder="例: Pana Spirits">
-    </div>
-    <div class="field">
-      <label for="dateInput">試合日</label>
-      <input type="date" id="dateInput">
-    </div>
-    <div class="field">
-      <label for="startTimeInput">試合開始時刻</label>
-      <input type="time" id="startTimeInput">
-    </div>
-    <div class="field">
-      <label for="meetTimeInput">集合時間</label>
-      <input type="time" id="meetTimeInput">
-    </div>
-    <div class="field">
-      <label for="locationInput">試合会場</label>
-      <input type="text" id="locationInput" placeholder="例: 北谷運動公園">
-    </div>
-  </section>
+  <nav class="admin-tabs" id="adminTabs">
+    <button type="button" class="admin-tab-btn active" data-tab="nextgame">次戦情報</button>
+    <button type="button" class="admin-tab-btn" data-tab="schedule">試合日程</button>
+    <button type="button" class="admin-tab-btn" data-tab="results">試合結果</button>
+    <button type="button" class="admin-tab-btn" data-tab="roster">選手名簿</button>
+  </nav>
 
-  <section class="admin-card">
-    <h2>スタメン(打順)</h2>
-    <p class="admin-note">基本は10人打ちですが、9人や11〜12人にも対応できます。行を追加・削除して人数を調整してください。</p>
-    <datalist id="positionOptions">
-      <option value="投"></option><option value="捕"></option><option value="一"></option><option value="二"></option>
-      <option value="三"></option><option value="遊"></option><option value="左"></option><option value="中"></option>
-      <option value="右"></option><option value="指"></option>
-    </datalist>
-    <div id="lineupRows"></div>
-    <button type="button" class="add-row-btn" id="addLineupBtn">+ 選手を追加</button>
-  </section>
+  <!-- ============ 次戦情報 ============ -->
+  <div id="tab-nextgame" class="admin-tab-panel">
 
-  <section class="admin-card">
-    <h2>ベンチメンバー</h2>
-    <div id="benchRows"></div>
-    <button type="button" class="add-row-btn" id="addBenchBtn">+ 追加</button>
-  </section>
+    <section class="admin-card">
+      <h2>次戦の基本情報</h2>
+      <div class="field">
+        <label for="opponentInput">対戦相手</label>
+        <input type="text" id="opponentInput" placeholder="例: Pana Spirits">
+      </div>
+      <div class="field">
+        <label for="dateInput">試合日</label>
+        <input type="date" id="dateInput">
+      </div>
+      <div class="field">
+        <label for="startTimeInput">試合開始時刻</label>
+        <input type="time" id="startTimeInput">
+      </div>
+      <div class="field">
+        <label for="meetTimeInput">集合時間</label>
+        <input type="time" id="meetTimeInput">
+      </div>
+      <div class="field">
+        <label for="locationInput">試合会場</label>
+        <input type="text" id="locationInput" placeholder="例: 北谷運動公園">
+      </div>
+    </section>
 
-  <section class="admin-card">
-    <h2>監督から一言・連絡事項</h2>
-    <p class="admin-note">任意入力です。空欄の場合、サイトには表示されません。</p>
-    <div class="field">
-      <textarea id="noteInput" rows="4" placeholder="例: 雨天中止の場合は前日20時までにグループLINEで連絡します"></textarea>
+    <section class="admin-card">
+      <h2>スタメン(打順)</h2>
+      <p class="admin-note">基本は10人打ちですが、9人や11〜12人にも対応できます。行を追加・削除して人数を調整してください。</p>
+      <datalist id="positionOptions">
+        <option value="投"></option><option value="捕"></option><option value="一"></option><option value="二"></option>
+        <option value="三"></option><option value="遊"></option><option value="左"></option><option value="中"></option>
+        <option value="右"></option><option value="指"></option>
+      </datalist>
+      <div id="lineupRows"></div>
+      <button type="button" class="add-row-btn" id="addLineupBtn">+ 選手を追加</button>
+    </section>
+
+    <section class="admin-card">
+      <h2>ベンチメンバー</h2>
+      <div id="benchRows"></div>
+      <button type="button" class="add-row-btn" id="addBenchBtn">+ 追加</button>
+    </section>
+
+    <section class="admin-card">
+      <h2>監督から一言・連絡事項</h2>
+      <p class="admin-note">任意入力です。空欄の場合、サイトには表示されません。</p>
+      <div class="field">
+        <textarea id="noteInput" rows="4" placeholder="例: 雨天中止の場合は前日20時までにグループLINEで連絡します"></textarea>
+      </div>
+    </section>
+
+    <div class="admin-actions">
+      <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">保存する</button>
+      <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
     </div>
-  </section>
+  </div>
 
-  <div class="admin-actions">
-    <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">保存する</button>
-    <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
+  <!-- ============ 試合日程 ============ -->
+  <div id="tab-schedule" class="admin-tab-panel" hidden>
+    <section class="admin-card">
+      <h2>試合日程</h2>
+      <p class="admin-note">今後の試合予定を登録します。日付・場所・時間が決まっていない場合は空欄のままで「未定」と表示されます。</p>
+      <div id="scheduleRows"></div>
+      <button type="button" class="add-row-btn" id="addScheduleBtn">+ 試合を追加</button>
+    </section>
+    <div class="admin-actions">
+      <button type="button" class="admin-btn admin-btn-primary" id="saveScheduleBtn">試合日程を保存する</button>
+    </div>
+  </div>
+
+  <!-- ============ 試合結果 ============ -->
+  <div id="tab-results" class="admin-tab-panel" hidden>
+    <section class="admin-card">
+      <h2>試合結果</h2>
+      <p class="admin-note">
+        どの大会・シーズンの結果か選んでから、試合を追加・編集してください。
+        勝敗と合計成績(◯勝◯敗◯引分)は得点から自動で計算されます。
+        1球ごとの詳細な記録(イニングごとの得点や個人打撃成績)は、この画面では編集できません(既存のデータは保存時もそのまま残ります)。
+      </p>
+      <div class="field">
+        <label for="resultsGroupSelect">大会・シーズン</label>
+        <select id="resultsGroupSelect"></select>
+      </div>
+      <div id="resultsGameList"></div>
+      <button type="button" class="add-row-btn" id="addResultBtn">+ この大会に試合結果を追加</button>
+
+      <div class="new-group-form" id="newGroupForm" hidden>
+        <div class="field">
+          <label for="newGroupTitle">新しい大会・シーズンの名前</label>
+          <input type="text" id="newGroupTitle" placeholder="例: 2027年度 Gリーグ福岡(リーグ戦)">
+        </div>
+        <button type="button" class="add-row-btn" id="confirmNewGroupBtn">この名前で追加する</button>
+      </div>
+      <button type="button" class="admin-btn-link" id="showNewGroupBtn" style="margin-top:0.8rem;">+ 新しい大会・シーズンを追加する</button>
+    </section>
+    <div class="admin-actions">
+      <button type="button" class="admin-btn admin-btn-primary" id="saveResultsBtn">試合結果を保存する</button>
+    </div>
+  </div>
+
+  <!-- ============ 選手名簿 ============ -->
+  <div id="tab-roster" class="admin-tab-panel" hidden>
+    <section class="admin-card">
+      <h2>選手名簿</h2>
+      <div id="rosterRows"></div>
+      <button type="button" class="add-row-btn" id="addRosterBtn">+ 選手を追加</button>
+    </section>
+    <div class="admin-actions">
+      <button type="button" class="admin-btn admin-btn-primary" id="saveRosterBtn">選手名簿を保存する</button>
+    </div>
   </div>
 
 </main>
@@ -314,12 +480,18 @@
 const CONFIG = {
   owner: 'igreeeen9-design',
   repo: 'fullface-hp',
-  path: 'data/next-game.json',
   branch: 'main',
+};
+const FILES = {
+  nextGame: 'data/next-game.json',
+  schedule: 'data/schedule.json',
+  results: 'data/results.json',
+  roster: 'data/players.json',
 };
 const TOKEN_KEY = 'ffhp_admin_token';
 
-let state = { sha: null, data: null };
+// path ごとに { sha, data } を保持する
+const states = {};
 
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -355,12 +527,18 @@ function clearStatus() {
   el.textContent = '';
 }
 
-function apiUrl() {
-  return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}?ref=${CONFIG.branch}`;
+function escapeAttr(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
-async function ghGet() {
-  const res = await fetch(apiUrl(), {
+function apiUrl(path) {
+  return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}`;
+}
+
+async function ghGet(path) {
+  const res = await fetch(apiUrl(path), {
     headers: {
       Authorization: `Bearer ${getToken()}`,
       Accept: 'application/vnd.github+json',
@@ -371,13 +549,12 @@ async function ghGet() {
     const body = await res.text();
     throw new Error(`読み込みに失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
   }
-  const json = await res.json();
-  return json;
+  return res.json();
 }
 
-async function ghPut(newDataObj, message) {
+async function ghPut(path, newDataObj, sha, message) {
   const content = utf8ToBase64(JSON.stringify(newDataObj, null, 2));
-  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`, {
+  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${getToken()}`,
@@ -385,21 +562,37 @@ async function ghPut(newDataObj, message) {
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      message,
-      content,
-      sha: state.sha,
-      branch: CONFIG.branch,
-    }),
+    body: JSON.stringify({ message, content, sha, branch: CONFIG.branch }),
   });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`保存に失敗しました (HTTP ${res.status}) ${body.slice(0, 300)}`);
   }
-  const json = await res.json();
-  state.sha = json.content.sha;
-  return json;
+  return res.json();
 }
+
+/* ---- タブ切り替え ---- */
+document.getElementById('adminTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.admin-tab-btn');
+  if (!btn) return;
+  document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.admin-tab-panel').forEach((panel) => {
+    panel.hidden = panel.id !== `tab-${btn.dataset.tab}`;
+  });
+  clearStatus();
+  ensureTabLoaded(btn.dataset.tab);
+});
+
+let tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false };
+function ensureTabLoaded(tab) {
+  if (!getToken() || tabsLoaded[tab]) return;
+  if (tab === 'nextgame') loadNextGame();
+  if (tab === 'schedule') loadSchedule();
+  if (tab === 'results') loadResults();
+  if (tab === 'roster') loadRoster();
+}
+
+/* ================== 次戦情報 ================== */
 
 function makeLineupRow(name, position) {
   const row = document.createElement('div');
@@ -451,12 +644,6 @@ function renumberLineup() {
   });
 }
 
-function escapeAttr(str) {
-  return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
-}
-
 function renderLineup(lineup) {
   const container = document.getElementById('lineupRows');
   container.innerHTML = '';
@@ -471,7 +658,7 @@ function renderBench(bench) {
   (bench || []).forEach((name) => container.appendChild(makeBenchRow(name)));
 }
 
-function fillForm(current) {
+function fillNextGameForm(current) {
   document.getElementById('opponentInput').value = current.opponent || '';
   document.getElementById('dateInput').value = current.date || '';
   document.getElementById('startTimeInput').value = current.startTime || '';
@@ -482,7 +669,7 @@ function fillForm(current) {
   document.getElementById('noteInput').value = current.note || '';
 }
 
-function collectForm() {
+function collectNextGameForm() {
   const lineup = Array.from(document.querySelectorAll('#lineupRows .lineup-row')).map((row, i) => ({
     order: i + 1,
     name: row.querySelector('.name-input').value.trim(),
@@ -503,15 +690,16 @@ function collectForm() {
   };
 }
 
-async function loadData() {
+async function loadNextGame() {
   showStatus('loading', '読み込み中...');
   try {
-    const json = await ghGet();
-    state.sha = json.sha;
-    state.data = JSON.parse(base64ToUtf8(json.content));
-    if (!state.data.history) state.data.history = [];
-    if (!state.data.current) state.data.current = {};
-    fillForm(state.data.current);
+    const json = await ghGet(FILES.nextGame);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    if (!data.history) data.history = [];
+    if (!data.current) data.current = {};
+    states.nextGame = { sha: json.sha, data };
+    fillNextGameForm(data.current);
+    tabsLoaded.nextgame = true;
     clearStatus();
   } catch (e) {
     showStatus('err', e.message || String(e));
@@ -523,11 +711,11 @@ async function saveCurrent() {
   saveBtn.disabled = true;
   showStatus('loading', '保存中...');
   try {
-    const current = collectForm();
+    const current = collectNextGameForm();
     current.updatedAt = new Date().toISOString();
-    const newData = { current, history: (state.data && state.data.history) || [] };
-    await ghPut(newData, '次戦情報を更新');
-    state.data = newData;
+    const newData = { current, history: (states.nextGame && states.nextGame.data.history) || [] };
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を更新');
+    states.nextGame = { sha: json.content.sha, data: newData };
     showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
   } catch (e) {
     showStatus('err', e.message || String(e));
@@ -542,15 +730,15 @@ async function archiveAndClear() {
   btn.disabled = true;
   showStatus('loading', '履歴に保存中...');
   try {
-    const current = collectForm();
+    const current = collectNextGameForm();
     current.updatedAt = new Date().toISOString();
-    const history = (state.data && state.data.history) || [];
+    const history = (states.nextGame && states.nextGame.data.history) || [];
     const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
     const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     const newData = { current: blankCurrent, history: newHistory };
-    await ghPut(newData, '試合終了: 次戦情報を履歴に保存してクリア');
-    state.data = newData;
-    fillForm(blankCurrent);
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存してクリア');
+    states.nextGame = { sha: json.content.sha, data: newData };
+    fillNextGameForm(blankCurrent);
     showStatus('ok', '履歴に保存し、フォームをクリアしました。');
   } catch (e) {
     showStatus('err', e.message || String(e));
@@ -558,6 +746,379 @@ async function archiveAndClear() {
     btn.disabled = false;
   }
 }
+
+document.getElementById('addLineupBtn').addEventListener('click', () => {
+  document.getElementById('lineupRows').appendChild(makeLineupRow('', ''));
+  renumberLineup();
+});
+document.getElementById('addBenchBtn').addEventListener('click', () => {
+  document.getElementById('benchRows').appendChild(makeBenchRow(''));
+});
+document.getElementById('saveBtn').addEventListener('click', saveCurrent);
+document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);
+
+/* ================== 共通: 日付の曜日表示 ================== */
+
+function formatDateOnly(dateStr) {
+  const m = dateStr && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const dayOfWeek = days[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}(${dayOfWeek})`;
+}
+
+/* ================== 試合日程 ================== */
+
+function makeScheduleRow(game) {
+  const row = document.createElement('div');
+  row.className = 'entry-row';
+  row.innerHTML = `
+    <div class="entry-row-grid cols-3">
+      <div>
+        <label>日付(未定なら空欄)</label>
+        <input type="date" class="sch-date" value="${escapeAttr(game.date || '')}">
+      </div>
+      <div>
+        <label>対戦相手</label>
+        <input type="text" class="sch-opponent" placeholder="例: Pana Spirits" value="${escapeAttr(game.opponent || '')}">
+      </div>
+      <div>
+        <label>時間</label>
+        <input type="text" class="sch-time" placeholder="例: 9:00" value="${escapeAttr(game.time || '')}">
+      </div>
+    </div>
+    <div class="field" style="margin:0.5rem 0 0;">
+      <label>場所</label>
+      <input type="text" class="sch-location" placeholder="例: 北谷運動公園" value="${escapeAttr(game.location || '')}">
+    </div>
+    <div class="entry-row-footer">
+      <span></span>
+      <button type="button" class="row-btn danger" data-act="del" title="削除">✕ 削除</button>
+    </div>
+  `;
+  row.querySelector('[data-act="del"]').addEventListener('click', () => row.remove());
+  return row;
+}
+
+function renderSchedule(games) {
+  const container = document.getElementById('scheduleRows');
+  container.innerHTML = '';
+  (games || []).forEach((g) => container.appendChild(makeScheduleRow(g)));
+}
+
+function collectSchedule() {
+  return Array.from(document.querySelectorAll('#scheduleRows .entry-row')).map((row) => ({
+    date: row.querySelector('.sch-date').value || null,
+    opponent: row.querySelector('.sch-opponent').value.trim(),
+    location: row.querySelector('.sch-location').value.trim() || null,
+    time: row.querySelector('.sch-time').value.trim() || null,
+  })).filter((g) => g.opponent);
+}
+
+async function loadSchedule() {
+  showStatus('loading', '読み込み中...');
+  try {
+    const json = await ghGet(FILES.schedule);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    if (!Array.isArray(data.games)) data.games = [];
+    states.schedule = { sha: json.sha, data };
+    renderSchedule(data.games);
+    tabsLoaded.schedule = true;
+    clearStatus();
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  }
+}
+
+async function saveSchedule() {
+  const btn = document.getElementById('saveScheduleBtn');
+  btn.disabled = true;
+  showStatus('loading', '保存中...');
+  try {
+    const newData = { games: collectSchedule() };
+    const json = await ghPut(FILES.schedule, newData, states.schedule.sha, '試合日程を更新');
+    states.schedule = { sha: json.content.sha, data: newData };
+    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('addScheduleBtn').addEventListener('click', () => {
+  document.getElementById('scheduleRows').appendChild(makeScheduleRow({}));
+});
+document.getElementById('saveScheduleBtn').addEventListener('click', saveSchedule);
+
+/* ================== 試合結果 ================== */
+
+function computeRecord(games) {
+  let win = 0, lose = 0, draw = 0;
+  (games || []).forEach((g) => {
+    if (g.resultClass === 'win') win++;
+    else if (g.resultClass === 'lose') lose++;
+    else if (g.resultClass === 'draw') draw++;
+  });
+  return `${win}勝${lose}敗${draw}引分`;
+}
+
+function recomputeTotal(originalText, groupList) {
+  const m = /^(.*?)\d+試合\s*\d+勝\d+敗\d+引分\s*$/.exec(originalText || '');
+  const prefix = m ? m[1] : (originalText || '');
+  let win = 0, lose = 0, draw = 0, n = 0;
+  groupList.forEach((g) => (g.games || []).forEach((game) => {
+    n++;
+    if (game.resultClass === 'win') win++;
+    else if (game.resultClass === 'lose') lose++;
+    else if (game.resultClass === 'draw') draw++;
+  }));
+  return `${prefix}${n}試合 ${win}勝${lose}敗${draw}引分`;
+}
+
+function parseScore(scoreText) {
+  const m = /^(\d+)\s*-\s*(\d+)$/.exec((scoreText || '').trim());
+  if (!m) return { us: '', them: '' };
+  return { us: m[1], them: m[2] };
+}
+
+function makeResultRow(game) {
+  const score = parseScore(game.score);
+  const row = document.createElement('div');
+  row.className = 'entry-row';
+  row.dataset.hasDetail = game.detail ? '1' : '';
+  row.innerHTML = `
+    <div class="entry-row-grid">
+      <div>
+        <label>日付</label>
+        <input type="date" class="res-date" value="${escapeAttr(game.date || '')}">
+      </div>
+      <div>
+        <label>対戦相手</label>
+        <input type="text" class="res-opponent" placeholder="例: ジャビッツ" value="${escapeAttr(game.opponent || '')}">
+      </div>
+    </div>
+    <div class="field" style="margin:0.5rem 0 0;">
+      <label>得点(自チーム - 相手)</label>
+      <div class="entry-row-score">
+        <input type="number" class="res-us" min="0" style="width:5rem;" value="${escapeAttr(score.us)}">
+        <span>-</span>
+        <input type="number" class="res-them" min="0" style="width:5rem;" value="${escapeAttr(score.them)}">
+      </div>
+    </div>
+    <div class="field" style="margin:0.5rem 0 0;">
+      <label>球場</label>
+      <input type="text" class="res-venue" placeholder="例: 北谷運動公園" value="${escapeAttr(game.venue || '')}">
+    </div>
+    <div class="entry-row-footer">
+      <span class="entry-row-badge">${game.detail ? '📊 詳細データあり(保存時もそのまま残ります)' : ''}</span>
+      <button type="button" class="row-btn danger" data-act="del" title="削除">✕ 削除</button>
+    </div>
+  `;
+  row.querySelector('[data-act="del"]').addEventListener('click', () => row.remove());
+  row._originalGame = game;
+  return row;
+}
+
+function renderResultsGroupSelect() {
+  const select = document.getElementById('resultsGroupSelect');
+  const groups = (states.results && states.results.data.groups) || [];
+  select.innerHTML = groups.map((g, i) => `<option value="${i}">${escapeAttr(g.title)}</option>`).join('');
+}
+
+function renderResultsGameList() {
+  const select = document.getElementById('resultsGroupSelect');
+  const idx = Number(select.value);
+  const groups = (states.results && states.results.data.groups) || [];
+  const group = groups[idx];
+  const container = document.getElementById('resultsGameList');
+  container.innerHTML = '';
+  if (!group) return;
+  (group.games || []).forEach((g) => container.appendChild(makeResultRow(g)));
+}
+
+function collectCurrentGroupGames() {
+  return Array.from(document.querySelectorAll('#resultsGameList .entry-row')).map((row) => {
+    const us = Number(row.querySelector('.res-us').value || 0);
+    const them = Number(row.querySelector('.res-them').value || 0);
+    const resultClass = us > them ? 'win' : (us < them ? 'lose' : 'draw');
+    const resultLabel = resultClass === 'win' ? '勝' : (resultClass === 'lose' ? '敗' : '分');
+    const date = row.querySelector('.res-date').value || null;
+    const original = row._originalGame || {};
+    return {
+      date,
+      dateLabel: formatDateOnly(date) || original.dateLabel || '未定',
+      opponent: row.querySelector('.res-opponent').value.trim(),
+      score: `${us} - ${them}`,
+      resultLabel,
+      resultClass,
+      venue: row.querySelector('.res-venue').value.trim(),
+      detail: original.detail || null,
+    };
+  }).filter((g) => g.opponent);
+}
+
+function applyCurrentGroupEditsToState() {
+  const select = document.getElementById('resultsGroupSelect');
+  const idx = Number(select.value);
+  const groups = (states.results && states.results.data.groups) || [];
+  const group = groups[idx];
+  if (!group) return;
+  group.games = collectCurrentGroupGames();
+  group.record = computeRecord(group.games);
+}
+
+document.getElementById('resultsGroupSelect').addEventListener('change', () => {
+  applyCurrentGroupEditsToStatePrevious();
+  renderResultsGameList();
+});
+// 直前まで表示していたグループの編集内容を失わないよう、切り替え前に保存しておく
+let lastGroupIndex = 0;
+function applyCurrentGroupEditsToStatePrevious() {
+  const groups = (states.results && states.results.data.groups) || [];
+  const group = groups[lastGroupIndex];
+  if (group) {
+    group.games = collectCurrentGroupGames();
+    group.record = computeRecord(group.games);
+  }
+  lastGroupIndex = Number(document.getElementById('resultsGroupSelect').value);
+}
+
+document.getElementById('addResultBtn').addEventListener('click', () => {
+  document.getElementById('resultsGameList').appendChild(makeResultRow({}));
+});
+
+document.getElementById('showNewGroupBtn').addEventListener('click', () => {
+  document.getElementById('newGroupForm').hidden = false;
+});
+document.getElementById('confirmNewGroupBtn').addEventListener('click', () => {
+  const title = document.getElementById('newGroupTitle').value.trim();
+  if (!title) return;
+  applyCurrentGroupEditsToStatePrevious();
+  const groups = (states.results && states.results.data.groups) || [];
+  const isHistory = /旧リーグ|^\d{4}年度\(/.test(title) === false && /過去|旧/.test(title);
+  groups.push({
+    id: `custom-${Date.now()}`,
+    title,
+    record: '0勝0敗0引分',
+    era: 'current',
+    games: [],
+  });
+  document.getElementById('newGroupTitle').value = '';
+  document.getElementById('newGroupForm').hidden = true;
+  renderResultsGroupSelect();
+  document.getElementById('resultsGroupSelect').value = String(groups.length - 1);
+  lastGroupIndex = groups.length - 1;
+  renderResultsGameList();
+});
+
+async function loadResults() {
+  showStatus('loading', '読み込み中...');
+  try {
+    const json = await ghGet(FILES.results);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    if (!Array.isArray(data.groups)) data.groups = [];
+    states.results = { sha: json.sha, data };
+    lastGroupIndex = 0;
+    renderResultsGroupSelect();
+    renderResultsGameList();
+    tabsLoaded.results = true;
+    clearStatus();
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  }
+}
+
+async function saveResults() {
+  const btn = document.getElementById('saveResultsBtn');
+  btn.disabled = true;
+  showStatus('loading', '保存中...');
+  try {
+    applyCurrentGroupEditsToStatePrevious();
+    const data = states.results.data;
+    data.leagueTotal = recomputeTotal(data.leagueTotal, data.groups.filter((g) => g.era === 'current'));
+    data.historyTotal = recomputeTotal(data.historyTotal, data.groups.filter((g) => g.era === 'history'));
+    const json = await ghPut(FILES.results, data, states.results.sha, '試合結果を更新');
+    states.results = { sha: json.content.sha, data };
+    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('saveResultsBtn').addEventListener('click', saveResults);
+
+/* ================== 選手名簿 ================== */
+
+function makeRosterRow(player) {
+  const row = document.createElement('div');
+  row.className = 'roster-row';
+  row.innerHTML = `
+    <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(player.number || '')}">
+    <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(player.name || '')}">
+    <input type="text" class="position-input" placeholder="主な守備" value="${escapeAttr(player.position || '')}">
+    <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
+  `;
+  row.querySelector('[data-act="del"]').addEventListener('click', () => row.remove());
+  return row;
+}
+
+function renderRoster(roster) {
+  const container = document.getElementById('rosterRows');
+  container.innerHTML = '';
+  (roster || []).forEach((p) => container.appendChild(makeRosterRow(p)));
+}
+
+function collectRoster() {
+  return Array.from(document.querySelectorAll('#rosterRows .roster-row')).map((row) => ({
+    number: row.querySelector('.number-input').value.trim(),
+    name: row.querySelector('.name-input').value.trim(),
+    position: row.querySelector('.position-input').value.trim(),
+  })).filter((p) => p.name);
+}
+
+async function loadRoster() {
+  showStatus('loading', '読み込み中...');
+  try {
+    const json = await ghGet(FILES.roster);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    if (!Array.isArray(data.roster)) data.roster = [];
+    states.roster = { sha: json.sha, data };
+    renderRoster(data.roster);
+    tabsLoaded.roster = true;
+    clearStatus();
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  }
+}
+
+async function saveRoster() {
+  const btn = document.getElementById('saveRosterBtn');
+  btn.disabled = true;
+  showStatus('loading', '保存中...');
+  try {
+    const newData = { roster: collectRoster() };
+    const json = await ghPut(FILES.roster, newData, states.roster.sha, '選手名簿を更新');
+    states.roster = { sha: json.content.sha, data: newData };
+    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('addRosterBtn').addEventListener('click', () => {
+  document.getElementById('rosterRows').appendChild(makeRosterRow({}));
+});
+document.getElementById('saveRosterBtn').addEventListener('click', saveRoster);
+
+/* ================== トークン & 初期化 ================== */
 
 function refreshTokenUI() {
   const has = !!getToken();
@@ -570,30 +1131,19 @@ document.getElementById('saveTokenBtn').addEventListener('click', () => {
   if (!val) return;
   setToken(val);
   refreshTokenUI();
-  loadData();
+  ensureTabLoaded('nextgame');
 });
 
 document.getElementById('changeTokenBtn').addEventListener('click', () => {
   clearToken();
+  tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false };
   refreshTokenUI();
   clearStatus();
 });
 
-document.getElementById('addLineupBtn').addEventListener('click', () => {
-  document.getElementById('lineupRows').appendChild(makeLineupRow('', ''));
-  renumberLineup();
-});
-
-document.getElementById('addBenchBtn').addEventListener('click', () => {
-  document.getElementById('benchRows').appendChild(makeBenchRow(''));
-});
-
-document.getElementById('saveBtn').addEventListener('click', saveCurrent);
-document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);
-
 refreshTokenUI();
 if (getToken()) {
-  loadData();
+  ensureTabLoaded('nextgame');
 } else {
   renderLineup([]);
 }

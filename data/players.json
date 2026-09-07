@@ -1,0 +1,99 @@
+{
+  "roster": [
+    {
+      "number": "1",
+      "name": "井口",
+      "position": "捕手"
+    },
+    {
+      "number": "4",
+      "name": "中西",
+      "position": "外野"
+    },
+    {
+      "number": "5",
+      "name": "高武",
+      "position": "一塁・投手"
+    },
+    {
+      "number": "6",
+      "name": "森",
+      "position": "三塁"
+    },
+    {
+      "number": "7",
+      "name": "真鍋",
+      "position": "一塁"
+    },
+    {
+      "number": "8",
+      "name": "田中（敬）",
+      "position": "一塁・投手"
+    },
+    {
+      "number": "13",
+      "name": "道下",
+      "position": "遊撃・DH"
+    },
+    {
+      "number": "16",
+      "name": "古賀",
+      "position": "捕手・投手"
+    },
+    {
+      "number": "17",
+      "name": "高橋",
+      "position": "二塁・外野"
+    },
+    {
+      "number": "19",
+      "name": "桑原",
+      "position": "-"
+    },
+    {
+      "number": "25",
+      "name": "大淵",
+      "position": "遊撃・投手"
+    },
+    {
+      "number": "31",
+      "name": "椛島",
+      "position": "三塁"
+    },
+    {
+      "number": "52",
+      "name": "佐伯",
+      "position": "一塁・外野・投手"
+    },
+    {
+      "number": "56",
+      "name": "澤渡",
+      "position": "三塁・外野"
+    },
+    {
+      "number": "61",
+      "name": "田中（桜）",
+      "position": "外野・捕手"
+    },
+    {
+      "number": "62",
+      "name": "丸山",
+      "position": "遊撃"
+    },
+    {
+      "number": "77",
+      "name": "藤岡",
+      "position": "外野"
+    },
+    {
+      "number": "90",
+      "name": "工藤",
+      "position": "-"
+    },
+    {
+      "number": "91",
+      "name": "工藤（由）",
+      "position": "DH"
+    }
+  ]
+}
