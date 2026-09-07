@@ -48,10 +48,15 @@ function escapeHtml(str) {
 
 function formatGameDate(dateStr, timeStr) {
   if (!dateStr) return '未定';
-  const d = new Date(`${dateStr}T00:00:00+09:00`);
-  if (isNaN(d.getTime())) return dateStr;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!m) return dateStr;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  // 閲覧環境のタイムゾーンに関わらず、日付文字列の年月日だけから曜日を求める
   const days = ['日', '月', '火', '水', '木', '金', '土'];
-  const label = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}(${days[d.getDay()]})`;
+  const dayOfWeek = days[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  const label = `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}(${dayOfWeek})`;
   return timeStr ? `${label} ${timeStr}` : label;
 }
 
