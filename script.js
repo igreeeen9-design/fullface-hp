@@ -1,12 +1,32 @@
 const navToggle = document.getElementById('navToggle');
 const mainNav = document.getElementById('mainNav');
 
+function closeAllNavGroups() {
+  mainNav.querySelectorAll('.nav-group.open').forEach((group) => {
+    group.classList.remove('open');
+    const toggle = group.querySelector('.nav-group-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  });
+}
+
 navToggle.addEventListener('click', () => {
-  mainNav.classList.toggle('open');
+  const isOpen = mainNav.classList.toggle('open');
+  if (!isOpen) closeAllNavGroups();
 });
 
 mainNav.querySelectorAll('a').forEach((link) => {
-  link.addEventListener('click', () => mainNav.classList.remove('open'));
+  link.addEventListener('click', () => {
+    mainNav.classList.remove('open');
+    closeAllNavGroups();
+  });
+});
+
+mainNav.querySelectorAll('.nav-group-toggle').forEach((toggle) => {
+  toggle.addEventListener('click', () => {
+    const group = toggle.closest('.nav-group');
+    const isOpen = group.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
 });
 
 document.querySelectorAll('.detail-toggle').forEach((button) => {

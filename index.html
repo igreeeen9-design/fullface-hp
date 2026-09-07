@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#132448">
 <title>FULL FACE | 福岡市近郊 草野球チーム</title>
 <link rel="icon" href="images/logo2-favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,13 +23,34 @@
       <span></span><span></span><span></span>
     </button>
     <nav class="main-nav" id="mainNav">
-      <a href="#next-game">次戦情報</a>
-      <a href="#about">チーム紹介</a>
-      <a href="#schedule">試合日程</a>
-      <a href="#results">試合結果</a>
-      <a href="#players">個人成績</a>
-      <a href="#history">過去の成績</a>
-      <a href="#contact">お問い合わせ</a>
+      <div class="nav-group" data-group="team">
+        <button type="button" class="nav-group-toggle" aria-expanded="false">
+          チーム<span class="nav-caret">▾</span>
+        </button>
+        <div class="nav-group-items">
+          <a href="#about">チーム紹介</a>
+          <a href="#contact">お問い合わせ</a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="game">
+        <button type="button" class="nav-group-toggle" aria-expanded="false">
+          試合<span class="nav-caret">▾</span>
+        </button>
+        <div class="nav-group-items">
+          <a href="#next-game">次戦情報</a>
+          <a href="#schedule">試合日程</a>
+          <a href="#results">試合結果</a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="stats">
+        <button type="button" class="nav-group-toggle" aria-expanded="false">
+          成績<span class="nav-caret">▾</span>
+        </button>
+        <div class="nav-group-items">
+          <a href="#players">個人成績</a>
+          <a href="#history">過去の成績</a>
+        </div>
+      </div>
     </nav>
   </div>
 </header>

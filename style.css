@@ -104,6 +104,34 @@ img { max-width: 100%; display: block; }
   color: #fff;
 }
 
+/* PC(デスクトップ)ではグループの入れ物を消して、これまでと同じ横並びリンクに見せる */
+.nav-group,
+.nav-group-items {
+  display: contents;
+}
+
+.nav-group-toggle {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--silver);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-caret {
+  font-size: 0.75em;
+  transition: transform 0.2s ease;
+}
+
 .nav-toggle {
   display: none;
   flex-direction: column;
@@ -699,11 +727,57 @@ img { max-width: 100%; display: block; }
   }
 
   .main-nav.open {
-    max-height: 300px;
+    max-height: 80vh;
+    overflow-y: auto;
   }
 
   .main-nav a {
     padding: 1rem 1.5rem;
     border-top: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* 階層型メニュー: チーム/試合/成績 の3カテゴリに分けて開閉できるように */
+  .nav-group,
+  .nav-group-items {
+    display: block;
+  }
+
+  .nav-group-toggle {
+    display: flex;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .nav-group.open .nav-group-toggle {
+    color: #fff;
+  }
+
+  .nav-group.open .nav-caret {
+    transform: rotate(180deg);
+  }
+
+  .nav-group-items {
+    max-height: 0;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.14);
+    transition: max-height 0.25s ease;
+  }
+
+  .nav-group.open .nav-group-items {
+    max-height: 300px;
+  }
+
+  .main-nav .nav-group-items a {
+    padding-left: 2.4rem;
+    font-size: 0.88rem;
+  }
+
+  /* スマホでの縦の余白を少し詰めて見やすくする(PC表示には影響しません) */
+  .hero {
+    padding: 3.5rem 1.2rem 3.5rem;
+  }
+
+  .section {
+    padding: 3rem 1.2rem;
   }
 }
