@@ -661,6 +661,10 @@ img { max-width: 100%; display: block; }
   font-weight: 700;
 }
 
+.next-game-lineup h3 {
+  font-size: 1.35rem;
+}
+
 .lineup-table td:first-child {
   font-family: var(--font-display);
   font-weight: 700;

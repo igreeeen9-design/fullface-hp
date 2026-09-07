@@ -92,7 +92,7 @@ function renderNextGame(container, data) {
       <div class="fact"><dt>集合時間</dt><dd>${escapeHtml(g.meetTime) || '未定'}</dd></div>
     </dl>
     <div class="next-game-lineup">
-      <h3>スタメン</h3>
+      <h3>スターティングメンバー発表！</h3>
       <div class="table-wrap">
         <table class="data-table lineup-table">
           <thead><tr><th>打順</th><th>選手</th><th>守備</th></tr></thead>
