@@ -5,10 +5,16 @@
     "startTime": "09:00",
     "meetTime": "08:20",
     "location": "北谷運動公園",
-    "lineup": [],
+    "lineup": [
+      {
+        "order": 1,
+        "name": "井口",
+        "position": "投"
+      }
+    ],
     "bench": [],
     "note": "試合前に集合写真撮ります！",
-    "updatedAt": "2026-09-08T13:06:26.593Z"
+    "updatedAt": "2026-09-08T21:53:38.852Z"
   },
   "history": []
 }
