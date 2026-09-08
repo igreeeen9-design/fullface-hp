@@ -288,12 +288,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin-top: 0.6rem;
   }
   .entry-row-badge {
     font-size: 0.75rem;
     color: var(--accent-light);
     font-weight: 700;
+  }
+  .entry-row-badge:not(:empty) {
+    flex: 1 1 100%;
   }
   .roster-row {
     display: flex;
@@ -309,6 +314,102 @@
     border-radius: 10px;
     padding: 0.9rem;
     margin-top: 0.8rem;
+  }
+
+  /* ---- 個人成績(打席結果)入力パネル ---- */
+  .boxscore-toggle {
+    background: none;
+    border: 1px solid var(--accent-light);
+    color: var(--accent-light);
+    border-radius: 999px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .boxscore-panel {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed #c9d0d4;
+  }
+  .boxscore-player {
+    background: #fff;
+    border: 1px solid #dde3e6;
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0.7rem;
+  }
+  .boxscore-player-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+  }
+  .boxscore-player-header input.bx-name { flex: 1.6; min-width: 0; }
+  .boxscore-player-header input.bx-position { flex: 0.8; min-width: 0; }
+  .boxscore-player-header .row-btn { flex: 0 0 auto; }
+  .bx-atbats {
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+  }
+  .bx-atbat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .bx-atbat-label {
+    flex: 0 0 4.6rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--navy);
+  }
+  .bx-atbat-row select {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.95rem;
+    border: 1px solid #c9d0d4;
+    border-radius: 7px;
+    background: #fff;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .add-row-btn.small {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.82rem;
+    margin-bottom: 0.6rem;
+  }
+  .bx-runs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .bx-runs-grid label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #6b7680;
+    margin-bottom: 0.25rem;
+  }
+  .bx-runs-grid input {
+    width: 100%;
+    padding: 0.55rem 0.6rem;
+    font-size: 0.92rem;
+    border: 1px solid #c9d0d4;
+    border-radius: 7px;
+    font-family: inherit;
+  }
+  .bx-summary {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--accent-light);
+    font-weight: 700;
+    background: var(--off-white);
+    border-radius: 7px;
+    padding: 0.5rem 0.7rem;
   }
 </style>
 </head>
@@ -434,12 +535,15 @@
 
   <!-- ============ 試合結果 ============ -->
   <div id="tab-results" class="admin-tab-panel" hidden>
+    <datalist id="rosterPlayersDatalist"></datalist>
     <section class="admin-card">
       <h2>試合結果</h2>
       <p class="admin-note">
         どの大会・シーズンの結果か選んでから、試合を追加・編集してください。
         勝敗と合計成績(◯勝◯敗◯引分)は得点から自動で計算されます。
-        1球ごとの詳細な記録(イニングごとの得点や個人打撃成績)は、この画面では編集できません(既存のデータは保存時もそのまま残ります)。
+        イニングごとの得点(2026年度)は、この画面では編集できません(既存のデータは保存時もそのまま残ります)。
+        2026年度の試合には「⚾ 個人成績を入力」から選手ごとの打席結果を追加できます。
+        2023〜2025年度の過去データは変更できません。
       </p>
       <div class="field">
         <label for="resultsGroupSelect">大会・シーズン</label>
@@ -885,11 +989,16 @@ function parseScore(scoreText) {
   return { us: m[1], them: m[2] };
 }
 
-function makeResultRow(game) {
+function makeResultRow(game, era) {
   const score = parseScore(game.score);
   const row = document.createElement('div');
   row.className = 'entry-row';
   row.dataset.hasDetail = game.detail ? '1' : '';
+  const detailBadge = game.detail
+    ? (game.detail.type === 'linescore' ? '📊 イニング詳細あり(保存時もそのまま残ります)' : '📊 詳細データあり(保存時もそのまま残ります)')
+    : '';
+  const canEditBoxscore = era === 'current';
+  const boxscoreBtnLabel = game.boxscore ? '⚾ 個人成績を編集(入力済み)' : '⚾ 個人成績を入力';
   row.innerHTML = `
     <div class="entry-row-grid">
       <div>
@@ -914,13 +1023,255 @@ function makeResultRow(game) {
       <input type="text" class="res-venue" placeholder="例: 北谷運動公園" value="${escapeAttr(game.venue || '')}">
     </div>
     <div class="entry-row-footer">
-      <span class="entry-row-badge">${game.detail ? '📊 詳細データあり(保存時もそのまま残ります)' : ''}</span>
-      <button type="button" class="row-btn danger" data-act="del" title="削除">✕ 削除</button>
+      <span class="entry-row-badge">${detailBadge}</span>
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        ${canEditBoxscore ? `<button type="button" class="boxscore-toggle" data-act="toggle-boxscore">${boxscoreBtnLabel}</button>` : ''}
+        <button type="button" class="row-btn danger" data-act="del" title="削除">✕ 削除</button>
+      </div>
     </div>
+    ${canEditBoxscore ? '<div class="boxscore-panel" hidden></div>' : ''}
   `;
   row.querySelector('[data-act="del"]').addEventListener('click', () => row.remove());
+  const toggleBtn = row.querySelector('[data-act="toggle-boxscore"]');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const panel = row.querySelector('.boxscore-panel');
+      if (row.dataset.bxInit !== '1') {
+        initBoxscorePanel(row, game);
+        row.dataset.bxInit = '1';
+      }
+      panel.hidden = !panel.hidden;
+    });
+  }
   row._originalGame = game;
   return row;
+}
+
+/* ================== 個人成績(打席結果)入力パネル ==================
+   打席結果を選ぶだけで、打席(PA)・打数(AB)・安打・打点以外の各項目を自動計算する。
+   保存形式は既存のボックススコア(headers/rows)と同じ「見出し配列+行配列」構造を
+   踏襲しつつ、2023〜2025年度のデータには無い列(打席・犠打・犠飛)を追加している。
+   これは既存試合(game.detail)には一切手を加えず、新しいフィールド game.boxscore
+   として追加で保存する形にすることで、過去データと衝突しないようにするための設計。 */
+
+const BOXSCORE_HEADERS = ['打順', '選手名', '守備', '打席', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '打点', '得点', '三振', '四球', '死球', '犠打', '犠飛'];
+
+const AT_BAT_OUTCOMES = [
+  { value: '1B', label: '単打' },
+  { value: '2B', label: '二塁打' },
+  { value: '3B', label: '三塁打' },
+  { value: 'HR', label: '本塁打' },
+  { value: 'BB', label: '四球' },
+  { value: 'HBP', label: '死球' },
+  { value: 'SO', label: '三振' },
+  { value: 'OUT', label: '凡打' },
+  { value: 'SH', label: '犠打' },
+  { value: 'SF', label: '犠飛' },
+];
+
+function computeStatsFromAtBats(atBats) {
+  const s = { PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, BB: 0, HBP: 0, SO: 0, SH: 0, SF: 0 };
+  (atBats || []).forEach((code) => {
+    if (!code) return; // 未選択の打席は集計しない
+    s.PA++;
+    if (code === '1B') { s.AB++; s.H++; s.B1++; }
+    else if (code === '2B') { s.AB++; s.H++; s.B2++; }
+    else if (code === '3B') { s.AB++; s.H++; s.B3++; }
+    else if (code === 'HR') { s.AB++; s.H++; s.HR++; }
+    else if (code === 'BB') { s.BB++; }
+    else if (code === 'HBP') { s.HBP++; }
+    else if (code === 'SO') { s.AB++; s.SO++; }
+    else if (code === 'OUT') { s.AB++; }
+    else if (code === 'SH') { s.SH++; }
+    else if (code === 'SF') { s.SF++; }
+  });
+  return s;
+}
+
+// 保存済みの合計値(headers/rows)から、同じ合計値になる打席の並びを復元する。
+// 実際に入力された順番までは保存していないため、あくまで「合計が一致する組み合わせ」
+// を機械的に再構成したものである旨を画面上に注記する。
+function reconstructAtBatsFromRow(headers, row) {
+  const idx = {};
+  headers.forEach((h, i) => { idx[h] = i; });
+  const num = (key) => {
+    if (!(key in idx)) return 0;
+    const v = row[idx[key]];
+    return (v == null || v === '-') ? 0 : (Number(v) || 0);
+  };
+  const atBats = [];
+  const push = (code, n) => { for (let i = 0; i < n; i++) atBats.push(code); };
+  push('1B', num('単打'));
+  push('2B', num('二塁打'));
+  push('3B', num('三塁打'));
+  push('HR', num('本塁打'));
+  push('BB', num('四球'));
+  push('HBP', num('死球'));
+  push('SO', num('三振'));
+  push('SH', num('犠打'));
+  push('SF', num('犠飛'));
+  const hits = num('単打') + num('二塁打') + num('三塁打') + num('本塁打');
+  const outsGuess = Math.max(0, num('打数') - hits - num('三振'));
+  push('OUT', outsGuess);
+  return atBats;
+}
+
+let rosterNamesLoaded = false;
+async function ensureRosterNamesLoaded() {
+  if (rosterNamesLoaded) return;
+  rosterNamesLoaded = true;
+  try {
+    const json = await ghGet(FILES.roster);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    const list = document.getElementById('rosterPlayersDatalist');
+    if (list && Array.isArray(data.roster)) {
+      list.innerHTML = data.roster.map((p) => `<option value="${escapeAttr(p.name)}">`).join('');
+    }
+  } catch (e) {
+    // 名前候補が読み込めなくても入力自体は手入力で継続できるため、エラーは無視する
+  }
+}
+
+function renumberAtBats(atbatsEl) {
+  Array.from(atbatsEl.querySelectorAll('.bx-atbat-row')).forEach((r, i) => {
+    r.querySelector('.bx-atbat-label').textContent = `第${i + 1}打席`;
+  });
+}
+
+function updateBxSummary(card) {
+  const atBats = Array.from(card.querySelectorAll('.bx-atbat-select')).map((s) => s.value);
+  const stats = computeStatsFromAtBats(atBats);
+  card.querySelector('.bx-summary').textContent =
+    `打席${stats.PA}　打数${stats.AB}　安打${stats.H}　三振${stats.SO}　四球${stats.BB}　死球${stats.HBP}　犠打${stats.SH}　犠飛${stats.SF}`;
+}
+
+function addAtBatRow(atbatsEl, code) {
+  const row = document.createElement('div');
+  row.className = 'bx-atbat-row';
+  row.innerHTML = `
+    <span class="bx-atbat-label"></span>
+    <select class="bx-atbat-select">
+      <option value="">選択してください</option>
+      ${AT_BAT_OUTCOMES.map((o) => `<option value="${o.value}">${o.label}</option>`).join('')}
+    </select>
+    <button type="button" class="row-btn danger" data-act="del-atbat" title="削除">✕</button>
+  `;
+  if (code) row.querySelector('select').value = code;
+  atbatsEl.appendChild(row);
+  return row;
+}
+
+function addPlayerCard(playersEl, player) {
+  const card = document.createElement('div');
+  card.className = 'boxscore-player';
+  card.innerHTML = `
+    <div class="boxscore-player-header">
+      <input type="text" class="bx-name" list="rosterPlayersDatalist" placeholder="選手名" value="${escapeAttr(player.name || '')}">
+      <input type="text" class="bx-position" placeholder="守備(任意)" value="${escapeAttr(player.position || '')}">
+      <button type="button" class="row-btn danger" data-act="del-player" title="この選手を削除">✕</button>
+    </div>
+    <div class="bx-atbats"></div>
+    <button type="button" class="add-row-btn small" data-act="add-atbat">+ 打席を追加</button>
+    <div class="bx-runs-grid">
+      <div><label>打点</label><input type="number" class="bx-rbi" min="0" value="${escapeAttr(player.rbi || 0)}"></div>
+      <div><label>得点</label><input type="number" class="bx-runs" min="0" value="${escapeAttr(player.runs || 0)}"></div>
+    </div>
+    <p class="bx-summary"></p>
+  `;
+  playersEl.appendChild(card);
+  const atbatsEl = card.querySelector('.bx-atbats');
+  const seedAtBats = (player.atBats && player.atBats.length) ? player.atBats : [''];
+  seedAtBats.forEach((code) => addAtBatRow(atbatsEl, code));
+  renumberAtBats(atbatsEl);
+  updateBxSummary(card);
+  return card;
+}
+
+function initBoxscorePanel(row, game) {
+  const panel = row.querySelector('.boxscore-panel');
+  const hasExisting = game.boxscore && Array.isArray(game.boxscore.headers) && Array.isArray(game.boxscore.rows) && game.boxscore.rows.length;
+  panel.innerHTML = `
+    <p class="admin-note">
+      出場した選手を追加し、打席ごとに結果を選んでください。打席・打数・安打などは自動計算されます。
+      打点・得点は打席結果だけでは正確に判断できないため、選手ごとの合計を別途入力してください。
+      ${hasExisting ? '<br>※ 保存済みの合計値から打席を再構成しています。実際に入力した打席の並び順とは異なる場合があります(合計は保存時の値と一致します)。' : ''}
+    </p>
+    <div class="bx-players"></div>
+    <button type="button" class="add-row-btn" data-act="add-player">+ 選手を追加</button>
+  `;
+  const playersEl = panel.querySelector('.bx-players');
+
+  if (hasExisting) {
+    const idx = {};
+    game.boxscore.headers.forEach((h, i) => { idx[h] = i; });
+    game.boxscore.rows.forEach((r) => {
+      addPlayerCard(playersEl, {
+        name: r[idx['選手名']] || '',
+        position: r[idx['守備']] || '',
+        atBats: reconstructAtBatsFromRow(game.boxscore.headers, r),
+        rbi: idx['打点'] != null ? r[idx['打点']] : 0,
+        runs: idx['得点'] != null ? r[idx['得点']] : 0,
+      });
+    });
+  } else {
+    addPlayerCard(playersEl, { name: '', position: '', atBats: [''], rbi: 0, runs: 0 });
+  }
+
+  panel.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    if (btn.dataset.act === 'add-player') {
+      addPlayerCard(playersEl, { name: '', position: '', atBats: [''], rbi: 0, runs: 0 });
+    } else if (btn.dataset.act === 'del-player') {
+      btn.closest('.boxscore-player').remove();
+    } else if (btn.dataset.act === 'add-atbat') {
+      const atbatsEl = btn.closest('.boxscore-player').querySelector('.bx-atbats');
+      addAtBatRow(atbatsEl);
+      renumberAtBats(atbatsEl);
+    } else if (btn.dataset.act === 'del-atbat') {
+      const card = btn.closest('.boxscore-player');
+      const atbatsEl = card.querySelector('.bx-atbats');
+      btn.closest('.bx-atbat-row').remove();
+      renumberAtBats(atbatsEl);
+      updateBxSummary(card);
+    }
+  });
+  panel.addEventListener('input', (e) => {
+    const card = e.target.closest('.boxscore-player');
+    if (card) updateBxSummary(card);
+  });
+  panel.addEventListener('change', (e) => {
+    const card = e.target.closest('.boxscore-player');
+    if (card) updateBxSummary(card);
+  });
+}
+
+function collectBoxscoreFromRow(row) {
+  const panel = row.querySelector('.boxscore-panel');
+  if (!panel || row.dataset.bxInit !== '1') {
+    // パネルを一度も開いていない(触っていない)場合は、既存のboxscoreをそのまま保持する
+    return (row._originalGame && row._originalGame.boxscore) || null;
+  }
+  const cards = Array.from(panel.querySelectorAll('.boxscore-player'));
+  const rows = [];
+  cards.forEach((card, i) => {
+    const name = card.querySelector('.bx-name').value.trim();
+    if (!name) return;
+    const position = card.querySelector('.bx-position').value.trim();
+    const atBats = Array.from(card.querySelectorAll('.bx-atbat-select')).map((s) => s.value).filter(Boolean);
+    const stats = computeStatsFromAtBats(atBats);
+    const rbi = Number(card.querySelector('.bx-rbi').value || 0);
+    const runs = Number(card.querySelector('.bx-runs').value || 0);
+    rows.push([
+      String(i + 1), name, position,
+      String(stats.PA), String(stats.AB), String(stats.H),
+      String(stats.B1), String(stats.B2), String(stats.B3), String(stats.HR),
+      String(rbi), String(runs), String(stats.SO), String(stats.BB), String(stats.HBP),
+      String(stats.SH), String(stats.SF),
+    ]);
+  });
+  if (!rows.length) return null;
+  return { headers: BOXSCORE_HEADERS, rows };
 }
 
 function renderResultsGroupSelect() {
@@ -937,7 +1288,8 @@ function renderResultsGameList() {
   const container = document.getElementById('resultsGameList');
   container.innerHTML = '';
   if (!group) return;
-  (group.games || []).forEach((g) => container.appendChild(makeResultRow(g)));
+  (group.games || []).forEach((g) => container.appendChild(makeResultRow(g, group.era)));
+  if (group.era === 'current') ensureRosterNamesLoaded();
 }
 
 function collectCurrentGroupGames() {
@@ -945,12 +1297,23 @@ function collectCurrentGroupGames() {
     const us = Number(row.querySelector('.res-us').value || 0);
     const them = Number(row.querySelector('.res-them').value || 0);
     const resultClass = us > them ? 'win' : (us < them ? 'lose' : 'draw');
-    const resultLabel = resultClass === 'win' ? '勝' : (resultClass === 'lose' ? '敗' : '分');
     const date = row.querySelector('.res-date').value || null;
     const original = row._originalGame || {};
-    return {
+    // 得点(勝敗)を実際に変更していない場合は、元のresultLabelの表記をそのまま保持する。
+    // 2023〜2025年度は敗戦を「負」と表記しているため(2026年度は「敗」)、ここで毎回
+    // 作り直すと保存するたびに表記が変わってしまう(過去データを壊さないため)。
+    const resultLabel = (original.resultClass === resultClass && original.resultLabel)
+      ? original.resultLabel
+      : (resultClass === 'win' ? '勝' : (resultClass === 'lose' ? '敗' : '分'));
+    // 日付を実際に変更していない場合は、元のdateLabelの表記(曜日の有無など)を
+    // そのまま保持する。特に2023〜2025年度は曜日を含まない表記のため、ここで
+    // 毎回作り直すと保存するたびに表記が変わってしまう(過去データを壊さないため)。
+    const dateLabel = (original.date === date && original.dateLabel)
+      ? original.dateLabel
+      : (formatDateOnly(date) || original.dateLabel || '未定');
+    const game = {
       date,
-      dateLabel: formatDateOnly(date) || original.dateLabel || '未定',
+      dateLabel,
       opponent: row.querySelector('.res-opponent').value.trim(),
       score: `${us} - ${them}`,
       resultLabel,
@@ -958,6 +1321,11 @@ function collectCurrentGroupGames() {
       venue: row.querySelector('.res-venue').value.trim(),
       detail: original.detail || null,
     };
+    // boxscoreは2026年度以降の試合にのみ存在しうるフィールド。過去データ(2023〜2025年度)の
+    // 試合オブジェクトに不要な `boxscore: null` を追加してしまわないよう、値がある場合だけ設定する。
+    const boxscore = collectBoxscoreFromRow(row);
+    if (boxscore) game.boxscore = boxscore;
+    return game;
   }).filter((g) => g.opponent);
 }
 

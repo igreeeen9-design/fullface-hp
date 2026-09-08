@@ -208,12 +208,20 @@ function renderGameDetail(detail) {
 
 function renderResultsGroup(group) {
   const rows = (group.games || []).map((g) => {
-    const hasDetail = !!g.detail;
+    const hasBoxscore = !!(g.boxscore && Array.isArray(g.boxscore.headers) && Array.isArray(g.boxscore.rows) && g.boxscore.rows.length);
+    const hasDetail = !!g.detail || hasBoxscore;
     const detailCell = hasDetail
       ? '<button class="detail-toggle" type="button">詳細を見る</button>' : '';
+    // 試合結果(イニング別得点)と個人成績(ボックススコア)は別々のデータとして
+    // 保存されているため(既存データを壊さないための互換設計)、両方あれば
+    // 同じ詳細欄の中に並べて表示する
+    const detailBlocks = [
+      g.detail ? renderGameDetail(g.detail) : '',
+      hasBoxscore ? renderGameDetail({ type: 'boxscore', headers: g.boxscore.headers, rows: g.boxscore.rows }) : '',
+    ].filter(Boolean).join('');
     const detailRow = hasDetail ? `
             <tr class="detail-row" hidden>
-              <td colspan="6">${renderGameDetail(g.detail)}
+              <td colspan="6">${detailBlocks}
               </td>
             </tr>` : '';
     return `
@@ -260,10 +268,22 @@ function renderResults(container, resultsData) {
     container.innerHTML = '<p class="placeholder-note">試合結果は準備中です。</p>';
     return;
   }
-  const groupsHtml = groups.map(renderResultsGroup).join('');
+  const parts = groups.map((g) => {
+    let html = renderResultsGroup(g);
+    // 2026年度は試合ごとの個人成績(admin.htmlから入力)が蓄積され次第、
+    // 自動でシーズン合計成績を表示する(現時点でデータが無ければ何も表示しない)
+    const { rows: seasonRows, hasReliablePA } = aggregateBoxscoreSeason(g);
+    if (seasonRows.length) {
+      html += `
+      <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
+      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
+      ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
+    }
+    return html;
+  });
   const totalHtml = resultsData.leagueTotal
     ? `<p class="league-total">${escapeHtml(resultsData.leagueTotal)}</p>` : '';
-  container.innerHTML = groupsHtml + totalHtml;
+  container.innerHTML = parts.join('') + totalHtml;
 }
 
 /* シーズン合計成績: 各試合のボックススコア(既存データ)を選手ごとに合算する。
@@ -279,21 +299,38 @@ function formatRate(numerator, denominator) {
   return (value < 0 ? '-' : '') + body;
 }
 
+function boxscoreSourceOf(game) {
+  // 2026年度以降はadmin.htmlから入力された個人成績を game.boxscore に保存する
+  // (試合結果本体やイニング別得点 game.detail を書き換えずに済むようにするため)。
+  // 2023〜2025年度は移行時のデータ構造のまま game.detail(type: boxscore)に入っている。
+  if (game.boxscore && Array.isArray(game.boxscore.headers) && Array.isArray(game.boxscore.rows)) {
+    return game.boxscore;
+  }
+  if (game.detail && game.detail.type === 'boxscore') {
+    return game.detail;
+  }
+  return null;
+}
+
 function aggregateBoxscoreSeason(group) {
   const totals = {};
   const order = [];
+  let paColumnCount = 0;
+  let gamesWithBoxscore = 0;
   (group.games || []).forEach((game) => {
-    const d = game.detail;
-    if (!d || d.type !== 'boxscore') return;
+    const d = boxscoreSourceOf(game);
+    if (!d) return;
     const idx = {};
     (d.headers || []).forEach((h, i) => { idx[h] = i; });
     const required = ['選手名', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '打点', '得点', '三振', '四球', '死球'];
     if (required.some((key) => !(key in idx))) return;
+    gamesWithBoxscore++;
+    if ('打席' in idx) paColumnCount++;
     (d.rows || []).forEach((row) => {
       const name = row[idx['選手名']];
       if (!name) return;
       if (!totals[name]) {
-        totals[name] = { name, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0 };
+        totals[name] = { name, PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0, SH: 0, SF: 0 };
         order.push(name);
       }
       const t = totals[name];
@@ -301,12 +338,19 @@ function aggregateBoxscoreSeason(group) {
       t.AB += num('打数'); t.H += num('安打'); t.B1 += num('単打'); t.B2 += num('二塁打');
       t.B3 += num('三塁打'); t.HR += num('本塁打'); t.RBI += num('打点'); t.Runs += num('得点');
       t.SO += num('三振'); t.BB += num('四球'); t.HBP += num('死球');
+      if ('打席' in idx) t.PA += num('打席');
+      if ('犠打' in idx) t.SH += num('犠打');
+      if ('犠飛' in idx) t.SF += num('犠飛');
     });
   });
-  return order.map((name) => totals[name]).sort((a, b) => (b.AB - a.AB) || (b.H - a.H));
+  // すべてのボックススコアに打席(PA)が記録されている場合のみPA列を信頼できるとみなす
+  // (2023〜2025年度のように一部の試合にPAが無いと合計が過小になり誤解を招くため)
+  const hasReliablePA = gamesWithBoxscore > 0 && paColumnCount === gamesWithBoxscore;
+  const rows = order.map((name) => totals[name]).sort((a, b) => (b.AB - a.AB) || (b.H - a.H));
+  return { rows, hasReliablePA };
 }
 
-function renderSeasonTotalsTable(rows) {
+function renderSeasonTotalsTable(rows, hasReliablePA) {
   if (!rows.length) return '';
   const body = rows.map((p) => {
     const totalBases = p.B1 + p.B2 * 2 + p.B3 * 3 + p.HR * 4;
@@ -316,6 +360,7 @@ function renderSeasonTotalsTable(rows) {
     return `
             <tr>
               <td>${escapeHtml(p.name)}</td>
+              ${hasReliablePA ? `<td>${p.PA}</td>` : ''}
               <td>${p.AB}</td>
               <td>${p.H}</td>
               <td>${p.B2}</td>
@@ -326,6 +371,7 @@ function renderSeasonTotalsTable(rows) {
               <td>${p.BB}</td>
               <td>${p.HBP}</td>
               <td>${p.SO}</td>
+              ${hasReliablePA ? `<td>${p.SH}</td><td>${p.SF}</td>` : ''}
               <td>${avg}</td>
               <td>${obp}</td>
               <td>${slg}</td>
@@ -336,8 +382,11 @@ function renderSeasonTotalsTable(rows) {
         <table class="data-table season-totals">
           <thead>
             <tr>
-              <th>選手名</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>選手名</th>
+              ${hasReliablePA ? '<th>打席</th>' : ''}
+              <th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
               <th>打点</th><th>得点</th><th>四球</th><th>死球</th><th>三振</th>
+              ${hasReliablePA ? '<th>犠打</th><th>犠飛</th>' : ''}
               <th>打率</th><th>出塁率</th><th>長打率</th>
             </tr>
           </thead>
@@ -367,12 +416,12 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
     } else if (statsFailed) {
       html += '<p class="placeholder-note">個人成績ランキングの読み込みに失敗しました。</p>';
     }
-    const seasonRows = aggregateBoxscoreSeason(g);
+    const { rows: seasonRows, hasReliablePA } = aggregateBoxscoreSeason(g);
     if (seasonRows.length) {
       html += `
       <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
       <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
-      ${renderSeasonTotalsTable(seasonRows)}`;
+      ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
     }
     return html;
   });
