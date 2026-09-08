@@ -5,63 +5,10 @@
     "startTime": "09:00",
     "meetTime": "08:20",
     "location": "北谷運動公園",
-    "lineup": [
-      {
-        "order": 1,
-        "name": "中西",
-        "position": "左"
-      },
-      {
-        "order": 2,
-        "name": "藤岡",
-        "position": "中"
-      },
-      {
-        "order": 3,
-        "name": "田中",
-        "position": "三"
-      },
-      {
-        "order": 4,
-        "name": "森",
-        "position": "一"
-      },
-      {
-        "order": 5,
-        "name": "真鍋",
-        "position": "投"
-      },
-      {
-        "order": 6,
-        "name": "髙橋",
-        "position": "二"
-      },
-      {
-        "order": 7,
-        "name": "道下",
-        "position": "指"
-      },
-      {
-        "order": 8,
-        "name": "古賀",
-        "position": "遊"
-      },
-      {
-        "order": 9,
-        "name": "大淵",
-        "position": "捕"
-      },
-      {
-        "order": 10,
-        "name": "桑原",
-        "position": "右"
-      }
-    ],
-    "bench": [
-      "井口😀"
-    ],
+    "lineup": [],
+    "bench": [],
     "note": "試合前に集合写真撮ります！\n１〜４番打者は代打井口の可能性アリです",
-    "updatedAt": "2026-09-08T07:35:56.157Z"
+    "updatedAt": "2026-09-08T13:04:45.609Z"
   },
   "history": []
 }
