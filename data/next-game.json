@@ -38,18 +38,18 @@
       },
       {
         "order": 7,
-        "name": "大淵",
-        "position": "捕"
-      },
-      {
-        "order": 8,
         "name": "道下",
         "position": "指"
       },
       {
-        "order": 9,
+        "order": 8,
         "name": "古賀",
         "position": "遊"
+      },
+      {
+        "order": 9,
+        "name": "大淵",
+        "position": "捕"
       },
       {
         "order": 10,
@@ -61,7 +61,7 @@
       "井口😀"
     ],
     "note": "試合前に集合写真撮ります！\n１〜４番打者は代打井口の可能性アリです",
-    "updatedAt": "2026-09-08T07:03:18.061Z"
+    "updatedAt": "2026-09-08T07:35:56.157Z"
   },
   "history": []
 }
