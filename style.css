@@ -432,7 +432,6 @@ img { max-width: 100%; display: block; }
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 480px;
   background: #fff;
 }
 
@@ -604,6 +603,15 @@ img { max-width: 100%; display: block; }
   padding: 1.2rem;
 }
 
+/* 詳細欄の中の個人成績表(ボックススコア)は横に長いが、その幅が親の試合結果テーブルの
+   カラム幅計算に伝わって表全体を広げてしまわないようにする定番の対処
+   (max-widthで内側の幅をレイアウト計算上0とみなさせ、min-widthで実際の描画幅は
+   セルいっぱいに戻す。中身自体は.table-wrapのoverflow-xでスクロールする) */
+.detail-cell-inner {
+  max-width: 0;
+  min-width: 100%;
+}
+
 .linescore {
   border-collapse: collapse;
   margin: 0 auto;
@@ -635,6 +643,16 @@ img { max-width: 100%; display: block; }
 
 .boxscore {
   min-width: 900px;
+}
+
+/* シーズン合計成績は列数が多いため、基本テーブルとは別に横スクロール用の最小幅を持たせる */
+.season-totals {
+  min-width: 760px;
+}
+
+.season-totals th,
+.season-totals td {
+  white-space: nowrap;
 }
 
 /* Next Game */
@@ -818,15 +836,64 @@ img { max-width: 100%; display: block; }
     padding: 3rem 1.2rem;
   }
 
-  /* テーブル: 対戦相手・球場などの文字が1文字ずつ縦に折り返されないようにする */
-  .data-table th,
-  .data-table td {
-    white-space: nowrap;
-    padding: 0.75rem 0.85rem;
-    font-size: 0.88rem;
+  /* スマホでは長い見出し(例: 過去の成績(2023〜2025年))が窮屈にならないよう縮小し、
+     それに合わせて見出し下の余白も詰める */
+  .section h2 {
+    font-size: 1.45rem;
+    gap: 0.6rem;
+    margin-bottom: 1.4rem;
   }
 
-  /* ボックススコアは列数が多いため、スマホではさらに詰めて横スクロール量を減らす */
+  /* テーブル共通の文字サイズ・余白。日程・結果など列数の少ない表はここでは折り返しを禁止せず、
+     画面内に収まるよう通常通り折り返させる
+     (横スクロール専用の表はこの下で個別にnowrapを指定。
+     日付のように途中で折り返せない文字列は、script.js側で(日)の前に
+     改行可能位置(wbr)を入れて対応しているため、ここでは折り返しを強制しすぎない) */
+  .data-table th,
+  .data-table td {
+    padding: 0.7rem 0.55rem;
+    font-size: 0.85rem;
+  }
+
+  /* 試合結果(6列)は自動レイアウトだと「対戦相手」等の列がつぶれて1文字ずつ縦に
+     折り返されたり、逆に表全体が画面より広がったりしやすいため、スマホでは
+     列ごとの幅をあらかじめ決めておく(PC表示はこれまで通り自動レイアウトのまま)。
+     ">"で直接の子要素だけを指定し、詳細欄の中にネストした個人成績表(ボックススコア)
+     の見出し・セルには影響しないようにする */
+  .results-table {
+    table-layout: fixed;
+  }
+
+  .results-table > thead > tr > th:nth-child(1),
+  .results-table > tbody > tr.result-row > td:nth-child(1) { width: 19%; }
+
+  .results-table > thead > tr > th:nth-child(2),
+  .results-table > tbody > tr.result-row > td:nth-child(2) { width: 23%; }
+
+  .results-table > thead > tr > th:nth-child(3),
+  .results-table > tbody > tr.result-row > td:nth-child(3) { width: 12%; }
+
+  .results-table > thead > tr > th:nth-child(4),
+  .results-table > tbody > tr.result-row > td:nth-child(4) { width: 9%; }
+
+  .results-table > thead > tr > th:nth-child(5),
+  .results-table > tbody > tr.result-row > td:nth-child(5) { width: 19%; }
+
+  .results-table > thead > tr > th:nth-child(6),
+  .results-table > tbody > tr.result-row > td:nth-child(6) { width: 18%; }
+
+  /* 詳細ボタンは列幅に収まるよう、スマホでは少し小さくし、
+     「詳細を見る」の「を見る」部分は省略して「詳細」のみ表示する(PCでは従来通り) */
+  .results-table .detail-toggle {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .results-table .detail-toggle-suffix {
+    display: none;
+  }
+
+  /* ボックススコアは列数が多いため横スクロール前提。スマホではさらに詰めて横スクロール量を減らす */
   .boxscore {
     min-width: 720px;
   }
@@ -835,6 +902,18 @@ img { max-width: 100%; display: block; }
   .boxscore td {
     padding: 0.45rem 0.5rem;
     font-size: 0.76rem;
+  }
+
+  /* シーズン合計成績: 列数は多いが読みやすさを保つため、ボックススコアほどは詰めない */
+  .season-totals {
+    min-width: 620px;
+  }
+
+  .season-totals th,
+  .season-totals td {
+    white-space: nowrap;
+    padding: 0.55rem 0.6rem;
+    font-size: 0.8rem;
   }
 
   .linescore th,

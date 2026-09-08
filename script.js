@@ -37,7 +37,11 @@ document.addEventListener('click', (event) => {
   const detailRow = button.closest('tr').nextElementSibling;
   const isOpen = !detailRow.hidden;
   detailRow.hidden = isOpen;
-  button.textContent = isOpen ? '詳細を見る' : '詳細を閉じる';
+  // ボタンの文言は「詳細」+開閉に応じた語尾(を見る/を閉じる)のspanに分けてあり、
+  // スマホでは語尾側をCSSで隠して列幅に収めている。textContentを丸ごと置き換えると
+  // そのspan構造が消えてしまうため、語尾のspanだけを更新する
+  const suffix = button.querySelector('.detail-toggle-suffix');
+  if (suffix) suffix.textContent = isOpen ? 'を見る' : 'を閉じる';
 });
 
 /* ---- Next Game (data/next-game.json を読み込んで表示) ---- */
@@ -46,6 +50,13 @@ function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// 「2026/09/13(日)」のような日付表記はスペースが無く折り返せないため、スマホの狭い表内で
+// 1文字ずつ縦に折り返される・逆に表全体が広がってしまう、のどちらにもならないよう
+// 曜日の「(」の前にだけ改行可能位置(wbr)を入れる
+function formatDateCell(str) {
+  return escapeHtml(str).replace('(', '<wbr>(').replace(/\//g, '/<wbr>');
 }
 
 function formatDateOnly(dateStr) {
@@ -157,7 +168,7 @@ function renderSchedule(container, data) {
   }
   const rows = games.map((g) => `
         <tr>
-          <td>${escapeHtml(formatDateOnly(g.date) || '未定')}</td>
+          <td>${formatDateOnly(g.date) ? formatDateCell(formatDateOnly(g.date)) : '未定'}</td>
           <td>${escapeHtml(g.opponent)}</td>
           <td>${escapeHtml(g.location || '未定')}</td>
           <td>${escapeHtml(g.time || '未定')}</td>
@@ -211,7 +222,7 @@ function renderResultsGroup(group) {
     const hasBoxscore = !!(g.boxscore && Array.isArray(g.boxscore.headers) && Array.isArray(g.boxscore.rows) && g.boxscore.rows.length);
     const hasDetail = !!g.detail || hasBoxscore;
     const detailCell = hasDetail
-      ? '<button class="detail-toggle" type="button">詳細を見る</button>' : '';
+      ? '<button class="detail-toggle" type="button">詳細<span class="detail-toggle-suffix">を見る</span></button>' : '';
     // 試合結果(イニング別得点)と個人成績(ボックススコア)は別々のデータとして
     // 保存されているため(既存データを壊さないための互換設計)、両方あれば
     // 同じ詳細欄の中に並べて表示する
@@ -219,14 +230,16 @@ function renderResultsGroup(group) {
       g.detail ? renderGameDetail(g.detail) : '',
       hasBoxscore ? renderGameDetail({ type: 'boxscore', headers: g.boxscore.headers, rows: g.boxscore.rows }) : '',
     ].filter(Boolean).join('');
+    // detail-cell-inner: 中の個人成績表(ボックススコア)は横に長いが、それに引っ張られて
+    // 試合結果テーブル本体まで横スクロールが必要にならないよう、専用のCSSで幅の伝播を止める
     const detailRow = hasDetail ? `
             <tr class="detail-row" hidden>
-              <td colspan="6">${detailBlocks}
-              </td>
+              <td colspan="6"><div class="detail-cell-inner">${detailBlocks}
+              </div></td>
             </tr>` : '';
     return `
             <tr class="result-row">
-              <td>${escapeHtml(g.dateLabel)}</td>
+              <td>${formatDateCell(g.dateLabel)}</td>
               <td>${escapeHtml(g.opponent)}</td>
               <td>${escapeHtml(g.score)}</td>
               <td class="result-${escapeHtml(g.resultClass)}">${escapeHtml(g.resultLabel)}</td>
