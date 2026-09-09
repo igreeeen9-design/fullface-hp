@@ -408,6 +408,38 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
       </div>`;
 }
 
+/* 2026年シーズンの個人打撃成績(打席数を含む)。stats.json の seasonRanking.players に
+   あらかじめ計算済みの値として保持されており、ここでは計算をせずそのまま表示するだけ
+   (試合ごとのボックススコア入力が揃うまでの間、既に検証済みの数値を表示するための仕組み)。 */
+function renderPlayerStatsTable(players) {
+  const rows = (players || []).map((p) => `
+            <tr>
+              <td>${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(p.pa)}</td>
+              <td>${escapeHtml(p.ab)}</td>
+              <td>${escapeHtml(p.h)}</td>
+              <td>${escapeHtml(p.b2)}</td>
+              <td>${escapeHtml(p.b3)}</td>
+              <td>${escapeHtml(p.hr)}</td>
+              <td>${escapeHtml(p.avg)}</td>
+              <td>${escapeHtml(p.obp)}</td>
+              <td>${escapeHtml(p.slg)}</td>
+              <td>${escapeHtml(p.ops)}</td>
+            </tr>`).join('');
+  return `
+      <div class="table-wrap">
+        <table class="data-table season-totals">
+          <thead>
+            <tr>
+              <th>選手名</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>打率</th><th>出塁率</th><th>長打率</th><th>OPS</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+}
+
 function renderHistory(container, resultsData, statsData, statsFailed) {
   const groups = (resultsData && Array.isArray(resultsData.groups))
     ? resultsData.groups.filter((g) => g.era === 'history') : [];
@@ -469,7 +501,15 @@ function renderPlayers(container, playersData, statsData, statsFailed) {
     rankingHtml = '<p class="placeholder-note">個人成績ランキングの読み込みに失敗しました。</p>';
   }
 
-  container.innerHTML = rosterHtml + rankingHtml;
+  let playerStatsHtml = '';
+  if (ranking && Array.isArray(ranking.players) && ranking.players.length) {
+    playerStatsHtml = `
+      <h3 class="table-title">2026年 個人打撃成績</h3>
+      <p class="placeholder-note">※ 2026年シーズン、全9試合の記録より。</p>
+      ${renderPlayerStatsTable(ranking.players)}`;
+  }
+
+  container.innerHTML = rosterHtml + rankingHtml + playerStatsHtml;
 }
 
 async function loadSiteData() {
