@@ -182,10 +182,29 @@ img { max-width: 100%; display: block; }
   z-index: 1;
 }
 
-.hero-logo {
-  width: 150px;
-  height: 150px;
+/* ロゴ全体がチーム紹介へのリンク。ホバー/タップで少し拡大させ、
+   クリックできることが自然に伝わるようにする */
+.hero-logo-link {
+  display: block;
+  width: fit-content;
   margin: 0 auto 1.5rem;
+  border-radius: 50%;
+  transition: transform 0.22s ease, filter 0.22s ease;
+}
+
+.hero-logo-link:hover,
+.hero-logo-link:focus-visible {
+  transform: scale(1.045);
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.35));
+}
+
+.hero-logo-link:active {
+  transform: scale(0.97);
+}
+
+.hero-logo {
+  width: 210px;
+  height: 210px;
   border-radius: 50%;
   border: 4px solid rgba(255, 255, 255, 0.15);
   box-shadow:
@@ -251,64 +270,6 @@ img { max-width: 100%; display: block; }
   max-width: 30em;
   color: #e7ecee;
   font-size: 1.05rem;
-}
-
-.hero-stats {
-  margin-top: 1.8rem;
-  display: flex;
-  gap: 0.7rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.hero-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 1rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: var(--silver);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.hero-stat b {
-  color: #fff;
-  font-weight: 800;
-}
-
-/* 「1997年結成」はチーム紹介へのリンクなので、ホバーで浮き上がる・矢印が
-   右にずれることでクリックできると自然に伝わるようにする */
-.hero-stat-link {
-  cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
-}
-
-.hero-stat-link:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.32);
-  transform: translateY(-2px);
-}
-
-.hero-stat-arrow {
-  color: var(--silver);
-  font-weight: 700;
-  transition: transform 0.18s ease;
-}
-
-.hero-stat-link:hover .hero-stat-arrow {
-  transform: translateX(3px);
-}
-
-.hero-actions {
-  margin-top: 2.2rem;
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  flex-wrap: wrap;
 }
 
 /* Member Menu (トップページ: メンバー向けの主要機能への入口) */
@@ -388,13 +349,6 @@ img { max-width: 100%; display: block; }
   background: var(--accent);
   box-shadow: 0 12px 26px rgba(43, 70, 128, 0.55);
 }
-
-.btn-outline {
-  border-color: var(--silver);
-  color: #fff;
-}
-
-.btn-outline:hover { background: rgba(255,255,255,0.1); }
 
 .btn-instagram {
   display: inline-block;
@@ -915,6 +869,12 @@ img { max-width: 100%; display: block; }
   /* スマホでの縦の余白を少し詰めて見やすくする(PC表示には影響しません) */
   .hero {
     padding: 3.5rem 1.2rem 3.5rem;
+  }
+
+  /* ロゴを主役にしつつ、スマホでは画面を圧迫しないサイズに抑える */
+  .hero-logo {
+    width: 168px;
+    height: 168px;
   }
 
   .section {
