@@ -475,12 +475,11 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
   container.innerHTML = parts.join('') + totalHtml;
 }
 
-function renderPlayers(container, playersData, statsData, statsFailed) {
+function renderRoster(container, playersData) {
   const roster = (playersData && Array.isArray(playersData.roster)) ? playersData.roster : [];
   const rosterRows = roster.map((p) => `
             <tr><td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td></tr>`).join('');
-  const rosterHtml = roster.length ? `
-      <h3 class="table-title">選手名簿</h3>
+  container.innerHTML = roster.length ? `
       <div class="table-wrap">
         <table class="data-table roster-table">
           <thead>
@@ -489,7 +488,9 @@ function renderPlayers(container, playersData, statsData, statsFailed) {
           <tbody>${rosterRows}</tbody>
         </table>
       </div>` : '<p class="placeholder-note">選手名簿は準備中です。</p>';
+}
 
+function renderPlayers(container, statsData, statsFailed) {
   const ranking = statsData && statsData.seasonRanking;
   let rankingHtml = '';
   if (ranking && Array.isArray(ranking.categories) && ranking.categories.length) {
@@ -509,7 +510,7 @@ function renderPlayers(container, playersData, statsData, statsFailed) {
       ${renderPlayerStatsTable(ranking.players)}`;
   }
 
-  container.innerHTML = rosterHtml + rankingHtml + playerStatsHtml;
+  container.innerHTML = rankingHtml + playerStatsHtml;
 }
 
 async function loadSiteData() {
@@ -517,6 +518,7 @@ async function loadSiteData() {
   const resultsEl = document.getElementById('resultsContent');
   const historyEl = document.getElementById('historyContent');
   const playersEl = document.getElementById('playersContent');
+  const rosterEl = document.getElementById('rosterContent');
 
   if (scheduleEl) {
     try {
@@ -559,11 +561,15 @@ async function loadSiteData() {
   }
 
   if (playersEl) {
+    renderPlayers(playersEl, statsData, statsFailed);
+  }
+
+  if (rosterEl) {
     try {
       const playersData = await loadJson('data/players.json');
-      renderPlayers(playersEl, playersData, statsData, statsFailed);
+      renderRoster(rosterEl, playersData);
     } catch (e) {
-      playersEl.innerHTML = ERROR_NOTE;
+      rosterEl.innerHTML = ERROR_NOTE;
     }
   }
 }
