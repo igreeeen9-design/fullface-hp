@@ -31,6 +31,11 @@
       "position": "投手•内野"
     },
     {
+      "number": "11",
+      "name": "金子",
+      "position": "二•外野"
+    },
+    {
       "number": "13",
       "name": "道下",
       "position": "外野•内野"
@@ -61,24 +66,24 @@
       "position": "外野•投手"
     },
     {
-      "number": "52",
-      "name": "佐伯",
-      "position": "内野・外野・投手"
-    },
-    {
       "number": "56",
       "name": "澤渡",
       "position": "捕手・外野"
     },
     {
-      "number": "61",
-      "name": "田中（桜）",
-      "position": "外野・投手"
+      "number": "52",
+      "name": "佐伯",
+      "position": "内野・外野・投手"
     },
     {
       "number": "62",
       "name": "丸山",
       "position": "-"
+    },
+    {
+      "number": "61",
+      "name": "田中（桜）",
+      "position": "外野・投手"
     },
     {
       "number": "77",
@@ -93,7 +98,7 @@
     {
       "number": "91",
       "name": "工藤（由）",
-      "position": "-"
+      "position": ""
     }
   ]
 }
