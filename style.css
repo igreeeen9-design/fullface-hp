@@ -280,12 +280,89 @@ img { max-width: 100%; display: block; }
   font-weight: 800;
 }
 
+/* 「1997年結成」はチーム紹介へのリンクなので、ホバーで浮き上がる・矢印が
+   右にずれることでクリックできると自然に伝わるようにする */
+.hero-stat-link {
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.hero-stat-link:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+  transform: translateY(-2px);
+}
+
+.hero-stat-arrow {
+  color: var(--silver);
+  font-weight: 700;
+  transition: transform 0.18s ease;
+}
+
+.hero-stat-link:hover .hero-stat-arrow {
+  transform: translateX(3px);
+}
+
 .hero-actions {
   margin-top: 2.2rem;
   display: flex;
   gap: 1rem;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+/* Member Menu (トップページ: メンバー向けの主要機能への入口) */
+.member-menu {
+  margin-top: 2.6rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.member-menu-title {
+  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--silver);
+}
+
+.member-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+@media (min-width: 620px) {
+  .member-menu-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 640px;
+  }
+}
+
+.member-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 1rem 0.8rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  text-align: center;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.member-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+  transform: translateY(-3px);
 }
 
 .btn {
