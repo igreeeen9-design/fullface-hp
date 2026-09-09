@@ -570,6 +570,7 @@
   <div id="tab-roster" class="admin-tab-panel" hidden>
     <section class="admin-card">
       <h2>選手名簿</h2>
+      <p class="admin-note">▲▼で表示順を入れ替えられます。サイトの選手名簿にはこの並び順のまま表示されます。</p>
       <div id="rosterRows"></div>
       <button type="button" class="add-row-btn" id="addRosterBtn">+ 選手を追加</button>
     </section>
@@ -1430,9 +1431,22 @@ function makeRosterRow(player) {
     <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(player.number || '')}">
     <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(player.name || '')}">
     <input type="text" class="position-input" placeholder="主な守備" value="${escapeAttr(player.position || '')}">
+    <button type="button" class="row-btn" data-act="up" title="上へ">▲</button>
+    <button type="button" class="row-btn" data-act="down" title="下へ">▼</button>
     <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
   `;
-  row.querySelector('[data-act="del"]').addEventListener('click', () => row.remove());
+  row.querySelectorAll('button[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const act = btn.dataset.act;
+      if (act === 'del') {
+        row.remove();
+      } else if (act === 'up' && row.previousElementSibling) {
+        row.parentElement.insertBefore(row, row.previousElementSibling);
+      } else if (act === 'down' && row.nextElementSibling) {
+        row.parentElement.insertBefore(row.nextElementSibling, row);
+      }
+    });
+  });
   return row;
 }
 
