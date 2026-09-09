@@ -325,6 +325,10 @@ function boxscoreSourceOf(game) {
   return null;
 }
 
+// FULL FACEの正式登録選手ではない助っ人。個人成績の集計・ランキングには含めないが、
+// 過去の試合結果やボックススコア自体(results.json)の名前は変更しない。
+const NON_ROSTER_GUEST_PLAYERS = ['中山', '大内'];
+
 function aggregateBoxscoreSeason(group) {
   const totals = {};
   const order = [];
@@ -342,6 +346,7 @@ function aggregateBoxscoreSeason(group) {
     (d.rows || []).forEach((row) => {
       const name = row[idx['選手名']];
       if (!name) return;
+      if (NON_ROSTER_GUEST_PLAYERS.includes(name)) return;
       if (!totals[name]) {
         totals[name] = { name, PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0, SH: 0, SF: 0 };
         order.push(name);
