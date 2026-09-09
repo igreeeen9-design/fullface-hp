@@ -510,7 +510,7 @@ function renderPlayers(container, statsData, statsFailed) {
       ${renderPlayerStatsTable(ranking.players)}`;
   }
 
-  container.innerHTML = rankingHtml + playerStatsHtml;
+  container.innerHTML = playerStatsHtml + rankingHtml;
 }
 
 async function loadSiteData() {
