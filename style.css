@@ -707,6 +707,19 @@ img { max-width: 100%; display: block; }
   width: 2.5em;
 }
 
+/* スタメン表の選手名は一目で分かるよう他の列より大きく・太く強調し、
+   守備は補足情報として控えめにすることでメリハリをつける */
+.lineup-table td:nth-child(2) {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.lineup-table td:nth-child(3) {
+  font-size: 0.85rem;
+  color: #6b7680;
+}
+
 .bench-list {
   display: flex;
   flex-wrap: wrap;
@@ -853,6 +866,11 @@ img { max-width: 100%; display: block; }
   .data-table td {
     padding: 0.7rem 0.55rem;
     font-size: 0.85rem;
+  }
+
+  /* スマホでも選手名がひと目でわかるよう、縮小後もはっきり大きく見えるサイズを保つ */
+  .lineup-table td:nth-child(2) {
+    font-size: 1.05rem;
   }
 
   /* 試合結果(6列)は自動レイアウトだと「対戦相手」等の列がつぶれて1文字ずつ縦に
