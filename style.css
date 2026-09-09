@@ -267,9 +267,12 @@ img { max-width: 100%; display: block; }
 
 .hero-copy {
   margin: 1rem auto 0;
-  max-width: 30em;
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 3.6vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: #e7ecee;
-  font-size: 1.05rem;
 }
 
 /* Member Menu (トップページ: メンバー向けの主要機能への入口) */
