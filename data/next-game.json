@@ -12,6 +12,69 @@
     "note": "試合前に集合写真撮ります。",
     "updatedAt": "2026-09-09T23:40:00.439Z"
   },
-  "draft": null,
+  "draft": {
+    "opponent": "Pana Spirits",
+    "date": "2026-09-13",
+    "startTime": "09:00",
+    "meetTime": "08:20",
+    "location": "北谷運動公園",
+    "lineup": [
+      {
+        "order": 1,
+        "name": "中西",
+        "position": "中"
+      },
+      {
+        "order": 2,
+        "name": "桑原",
+        "position": "指"
+      },
+      {
+        "order": 3,
+        "name": "田中",
+        "position": "三"
+      },
+      {
+        "order": 4,
+        "name": "森",
+        "position": "一"
+      },
+      {
+        "order": 5,
+        "name": "真鍋",
+        "position": "投"
+      },
+      {
+        "order": 6,
+        "name": "髙橋",
+        "position": "二"
+      },
+      {
+        "order": 7,
+        "name": "道下",
+        "position": "右"
+      },
+      {
+        "order": 8,
+        "name": "古賀",
+        "position": "遊"
+      },
+      {
+        "order": 9,
+        "name": "藤岡",
+        "position": "中"
+      },
+      {
+        "order": 10,
+        "name": "大淵",
+        "position": "捕"
+      }
+    ],
+    "bench": [
+      "井口😀"
+    ],
+    "note": "試合前に集合写真撮ります。",
+    "savedAt": "2026-09-09T23:43:57.204Z"
+  },
   "history": []
 }
