@@ -452,6 +452,15 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
 
   const parts = groups.map((g) => {
     let html = renderResultsGroup(g);
+
+    const { rows: seasonRows, hasReliablePA } = aggregateBoxscoreSeason(g);
+    if (seasonRows.length) {
+      html += `
+      <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
+      <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
+      ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
+    }
+
     const ranking = rankingsById[g.id];
     if (ranking) {
       html += `
@@ -460,13 +469,6 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
       ${renderRankingGrid(ranking.categories)}`;
     } else if (statsFailed) {
       html += '<p class="placeholder-note">個人成績ランキングの読み込みに失敗しました。</p>';
-    }
-    const { rows: seasonRows, hasReliablePA } = aggregateBoxscoreSeason(g);
-    if (seasonRows.length) {
-      html += `
-      <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
-      <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
-      ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
     }
     return html;
   });
