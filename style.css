@@ -707,17 +707,12 @@ img { max-width: 100%; display: block; }
   width: 2.5em;
 }
 
-/* スタメン表の選手名は一目で分かるよう他の列より大きく・太く強調し、
-   守備は補足情報として控えめにすることでメリハリをつける */
-.lineup-table td:nth-child(2) {
+/* スタメン表の選手名・守備は一目で分かるよう、どちらも大きく・太く強調する */
+.lineup-table td:nth-child(2),
+.lineup-table td:nth-child(3) {
   font-size: 1.15rem;
   font-weight: 800;
   color: var(--navy);
-}
-
-.lineup-table td:nth-child(3) {
-  font-size: 0.85rem;
-  color: #6b7680;
 }
 
 .bench-list {
@@ -868,8 +863,9 @@ img { max-width: 100%; display: block; }
     font-size: 0.85rem;
   }
 
-  /* スマホでも選手名がひと目でわかるよう、縮小後もはっきり大きく見えるサイズを保つ */
-  .lineup-table td:nth-child(2) {
+  /* スマホでも選手名・守備がひと目でわかるよう、縮小後もはっきり大きく見えるサイズを保つ */
+  .lineup-table td:nth-child(2),
+  .lineup-table td:nth-child(3) {
     font-size: 1.05rem;
   }
 
