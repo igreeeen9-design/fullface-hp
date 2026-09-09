@@ -404,22 +404,30 @@ img { max-width: 100%; display: block; }
   letter-spacing: 0.05em;
 }
 
-/* 見出し右端の「↑ TOP」。主役の見出しより控えめな補助リンクとして小さく・薄い色にし、
-   h2のflexレイアウトに乗せてmargin-leftのautoで右端に押し出す */
+/* 見出し右端の「戻る」。主役の見出しより明らかに小さい、控えめなピル型の
+   アウトラインボタンにし、h2のflexレイアウトに乗せてmargin-leftのautoで
+   右端(スマホでは特に右端寄り)に押し出す */
 .section-top-link {
   margin-left: auto;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #c9d0d4;
   font-family: inherit;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--accent-light);
+  color: #6b7680;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  transition: color 0.18s ease, transform 0.18s ease;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .section-top-link:hover {
-  color: var(--navy);
+  color: var(--accent-light);
+  border-color: var(--accent-light);
+  background: var(--off-white);
   transform: translateY(-2px);
 }
 
@@ -912,7 +920,8 @@ img { max-width: 100%; display: block; }
   }
 
   .section-top-link {
-    font-size: 0.72rem;
+    padding: 0.26rem 0.75rem;
+    font-size: 0.68rem;
   }
 
   /* テーブル共通の文字サイズ・余白。日程・結果など列数の少ない表はここでは折り返しを禁止せず、
