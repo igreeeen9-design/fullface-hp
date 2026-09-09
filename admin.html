@@ -170,6 +170,11 @@
     border-color: var(--red-light);
     color: var(--red);
   }
+  .admin-btn-secondary {
+    background: #fff;
+    border-color: var(--accent-light);
+    color: var(--accent-light);
+  }
   .admin-btn-link {
     background: none;
     border: none;
@@ -464,6 +469,11 @@
   <!-- ============ 次戦情報 ============ -->
   <div id="tab-nextgame" class="admin-tab-panel">
 
+    <section class="admin-card" id="nextGameStatusCard">
+      <h2>状態</h2>
+      <div id="nextGameStatusInfo"></div>
+    </section>
+
     <section class="admin-card">
       <h2>次戦の基本情報</h2>
       <div class="field">
@@ -515,7 +525,8 @@
     </section>
 
     <div class="admin-actions">
-      <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">保存する</button>
+      <button type="button" class="admin-btn admin-btn-secondary" id="saveDraftBtn">下書き保存</button>
+      <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">公開する</button>
       <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
     </div>
   </div>
@@ -795,6 +806,26 @@ function collectNextGameForm() {
   };
 }
 
+// 「下書き」は data/next-game.json に current/history と並ぶ第三のフィールドとして保存する。
+// 公開ページ(script.js)は current しか読まないため、下書きを保存しただけではサイトに一切影響しない。
+function renderNextGameStatus() {
+  const box = document.getElementById('nextGameStatusInfo');
+  const data = states.nextGame && states.nextGame.data;
+  if (!box || !data) return;
+  const cur = data.current || {};
+  const curLabel = cur.opponent
+    ? `${escapeAttr(cur.opponent)}(${escapeAttr(formatDateOnly(cur.date) || cur.date || '未定')})・スタメン${(cur.lineup || []).length}人`
+    : '未設定';
+  let html = `<p class="admin-note" style="margin:0 0 0.6rem;">🌐 現在サイトに公開中: <strong>${curLabel}</strong></p>`;
+  if (data.draft) {
+    const savedAt = data.draft.savedAt ? new Date(data.draft.savedAt).toLocaleString('ja-JP') : '';
+    html += `<p class="admin-note" style="margin:0; color:var(--red);">📝 下書きがあります(保存日時: ${escapeAttr(savedAt)})。下のフォームは下書きの内容です。「公開する」を押すまでサイトには反映されません。</p>`;
+  } else {
+    html += `<p class="admin-note" style="margin:0;">下書きはありません。下のフォームには公開中の内容を表示しています。</p>`;
+  }
+  box.innerHTML = html;
+}
+
 async function loadNextGame() {
   showStatus('loading', '読み込み中...');
   try {
@@ -802,8 +833,10 @@ async function loadNextGame() {
     const data = JSON.parse(base64ToUtf8(json.content));
     if (!data.history) data.history = [];
     if (!data.current) data.current = {};
+    if (!data.draft) data.draft = null;
     states.nextGame = { sha: json.sha, data };
-    fillNextGameForm(data.current);
+    fillNextGameForm(data.draft || data.current);
+    renderNextGameStatus();
     tabsLoaded.nextgame = true;
     clearStatus();
   } catch (e) {
@@ -811,17 +844,40 @@ async function loadNextGame() {
   }
 }
 
+async function saveDraft() {
+  const btn = document.getElementById('saveDraftBtn');
+  btn.disabled = true;
+  showStatus('loading', '下書きを保存中...');
+  try {
+    const draft = collectNextGameForm();
+    draft.savedAt = new Date().toISOString();
+    const current = (states.nextGame && states.nextGame.data.current) || {};
+    const history = (states.nextGame && states.nextGame.data.history) || [];
+    const newData = { current, draft, history };
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報の下書きを保存');
+    states.nextGame = { sha: json.content.sha, data: newData };
+    renderNextGameStatus();
+    showStatus('ok', '下書きを保存しました。この内容はまだ一般公開ページには反映されていません。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function saveCurrent() {
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.disabled = true;
-  showStatus('loading', '保存中...');
+  showStatus('loading', '公開中...');
   try {
     const current = collectNextGameForm();
     current.updatedAt = new Date().toISOString();
-    const newData = { current, history: (states.nextGame && states.nextGame.data.history) || [] };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を更新');
+    const history = (states.nextGame && states.nextGame.data.history) || [];
+    const newData = { current, draft: null, history };
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を公開');
     states.nextGame = { sha: json.content.sha, data: newData };
-    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+    renderNextGameStatus();
+    showStatus('ok', '公開しました。1分ほどでサイトに反映されます。');
   } catch (e) {
     showStatus('err', e.message || String(e));
   } finally {
@@ -840,10 +896,11 @@ async function archiveAndClear() {
     const history = (states.nextGame && states.nextGame.data.history) || [];
     const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
     const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
-    const newData = { current: blankCurrent, history: newHistory };
+    const newData = { current: blankCurrent, draft: null, history: newHistory };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存してクリア');
     states.nextGame = { sha: json.content.sha, data: newData };
     fillNextGameForm(blankCurrent);
+    renderNextGameStatus();
     showStatus('ok', '履歴に保存し、フォームをクリアしました。');
   } catch (e) {
     showStatus('err', e.message || String(e));
@@ -859,6 +916,7 @@ document.getElementById('addLineupBtn').addEventListener('click', () => {
 document.getElementById('addBenchBtn').addEventListener('click', () => {
   document.getElementById('benchRows').appendChild(makeBenchRow(''));
 });
+document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
 document.getElementById('saveBtn').addEventListener('click', saveCurrent);
 document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);
 
