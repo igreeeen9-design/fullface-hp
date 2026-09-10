@@ -311,7 +311,7 @@ function renderResults(container, resultsData) {
     if (seasonRows.length) {
       html += `
       <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
-      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
+      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
       ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
     }
     return html;
@@ -365,12 +365,16 @@ function aggregateBoxscoreSeason(group) {
     if (required.some((key) => !(key in idx))) return;
     gamesWithBoxscore++;
     if ('打席' in idx) paColumnCount++;
+    // 出場試合数(GP): 打席が無くても守備・代走などの出場記録(ボックススコアの行)が
+    // あれば1試合とカウントする。同じ試合に複数行あっても1試合として数えるため、
+    // 試合ごとに出場した選手名をSetで集めてから加算する。
+    const namesInGame = new Set();
     (d.rows || []).forEach((row) => {
       const name = row[idx['選手名']];
       if (!name) return;
       if (NON_ROSTER_GUEST_PLAYERS.includes(name)) return;
       if (!totals[name]) {
-        totals[name] = { name, PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0, SH: 0, SF: 0 };
+        totals[name] = { name, GP: 0, PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0, SH: 0, SF: 0 };
         order.push(name);
       }
       const t = totals[name];
@@ -381,7 +385,9 @@ function aggregateBoxscoreSeason(group) {
       if ('打席' in idx) t.PA += num('打席');
       if ('犠打' in idx) t.SH += num('犠打');
       if ('犠飛' in idx) t.SF += num('犠飛');
+      namesInGame.add(name);
     });
+    namesInGame.forEach((name) => { totals[name].GP += 1; });
   });
   // すべてのボックススコアに打席(PA)が記録されている場合のみPA列を信頼できるとみなす
   // (2023〜2025年度のように一部の試合にPAが無いと合計が過小になり誤解を招くため)
@@ -400,6 +406,7 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
     return `
             <tr>
               <td>${escapeHtml(p.name)}</td>
+              <td>${p.GP}</td>
               ${hasReliablePA ? `<td>${p.PA}</td>` : ''}
               <td>${p.AB}</td>
               <td>${p.H}</td>
@@ -423,6 +430,7 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
           <thead>
             <tr>
               <th>選手名</th>
+              <th>試合</th>
               ${hasReliablePA ? '<th>打席</th>' : ''}
               <th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
               <th>打点</th><th>得点</th><th>四球</th><th>死球</th><th>三振</th>
@@ -485,7 +493,7 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
     if (seasonRows.length) {
       html += `
       <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
-      <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。</p>
+      <p class="placeholder-note">※ 各試合のボックススコアの合計です。打席数(PA)は犠打・犠飛が記録に含まれないため表示していません。打数(AB)が0の選手は打率などを「-」と表示しています。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
       ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
     }
 
