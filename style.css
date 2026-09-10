@@ -275,6 +275,84 @@ img { max-width: 100%; display: block; }
   color: #e7ecee;
 }
 
+/* トップページ: 次の試合を主役にしたハイライトカード(黒+赤で少しスポーティーに) */
+.hero-next-game {
+  position: relative;
+  margin: 2.4rem auto 0;
+  max-width: 420px;
+  padding: 1.5rem 1.6rem 1.7rem;
+  background: linear-gradient(165deg, var(--navy-dark) 0%, #000 130%);
+  border: 1px solid rgba(232, 57, 79, 0.35);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.hero-next-game::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--red-light), transparent);
+}
+
+.hero-next-game-label {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--red-light);
+}
+
+.hero-next-game-datetime {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+.hero-next-game-opponent {
+  margin: 0.25rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.hero-next-game-venue {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--silver);
+}
+
+.hero-next-game-link {
+  display: inline-block;
+  margin-top: 1.2rem;
+  padding: 0.6rem 1.7rem;
+  border-radius: 999px;
+  background: var(--red-light);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.hero-next-game-link:hover {
+  background: var(--red);
+  transform: translateY(-2px);
+}
+
+.hero-next-game-empty {
+  margin: 0;
+  color: var(--silver);
+  font-size: 0.92rem;
+}
+
 /* Member Menu (トップページ: メンバー向けの主要機能への入口) */
 .member-menu {
   margin-top: 2.6rem;
@@ -308,25 +386,36 @@ img { max-width: 100%; display: block; }
 
 .member-menu-btn {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
-  min-height: 52px;
-  padding: 1rem 0.8rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  gap: 0.3rem;
+  min-height: 74px;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: #fff;
-  font-weight: 700;
-  font-size: 0.92rem;
-  letter-spacing: 0.02em;
-  text-align: center;
+  text-align: left;
   transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
 .member-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(232, 57, 79, 0.5);
   transform: translateY(-3px);
+}
+
+.member-menu-btn-title {
+  font-weight: 800;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+}
+
+.member-menu-btn-desc {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--silver);
 }
 
 .btn {
@@ -904,13 +993,22 @@ img { max-width: 100%; display: block; }
 
   /* スマホでの縦の余白を少し詰めて見やすくする(PC表示には影響しません) */
   .hero {
-    padding: 3.5rem 1.2rem 3.5rem;
+    padding: 2.4rem 1.2rem 3.5rem;
   }
 
   /* ロゴを主役にしつつ、スマホでは画面を圧迫しないサイズに抑える */
   .hero-logo {
     width: 168px;
     height: 168px;
+  }
+
+  .hero-next-game {
+    margin-top: 1.4rem;
+    padding: 1rem 1.2rem 1.3rem;
+  }
+
+  .hero-next-game-datetime {
+    font-size: 1.3rem;
   }
 
   .section {

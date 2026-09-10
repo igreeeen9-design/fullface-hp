@@ -135,16 +135,38 @@ function renderNextGame(container, data) {
   `;
 }
 
+// トップページ(ヒーローエリア)に表示する簡易サマリー。既存のrenderNextGame()が描画する
+// 詳細(スタメン・ベンチ・監督コメント)には手を加えず、同じデータから要点だけを
+// 別要素(#heroNextGame、存在する場合のみ)に追加で表示する。
+function renderHeroNextGame(data) {
+  const el = document.getElementById('heroNextGame');
+  if (!el) return;
+  const g = data && data.current;
+  if (!g || !g.opponent) {
+    el.innerHTML = '<p class="hero-next-game-empty">次の試合は決まり次第お知らせします。</p>';
+    return;
+  }
+  el.innerHTML = `
+    <p class="hero-next-game-label">NEXT GAME</p>
+    <p class="hero-next-game-datetime">${escapeHtml(formatGameDate(g.date, g.startTime))}</p>
+    <p class="hero-next-game-opponent">vs ${escapeHtml(g.opponent)}</p>
+    ${g.location ? `<p class="hero-next-game-venue">@ ${escapeHtml(g.location)}</p>` : ''}
+    <a href="#next-game" class="hero-next-game-link">試合詳細を見る</a>
+  `;
+}
+
 async function loadNextGame() {
   const container = document.getElementById('nextGameContent');
-  if (!container) return;
   try {
     const res = await fetch('data/next-game.json', { cache: 'no-store' });
     if (!res.ok) throw new Error('failed to load next-game.json');
     const data = await res.json();
-    renderNextGame(container, data);
+    if (container) renderNextGame(container, data);
+    renderHeroNextGame(data);
   } catch (e) {
-    container.innerHTML = '<p class="placeholder-note">次戦情報の読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
+    if (container) container.innerHTML = '<p class="placeholder-note">次戦情報の読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
+    const heroEl = document.getElementById('heroNextGame');
+    if (heroEl) heroEl.innerHTML = '<p class="hero-next-game-empty">次戦情報の読み込みに失敗しました。</p>';
   }
 }
 
