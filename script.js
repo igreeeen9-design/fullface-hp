@@ -442,6 +442,7 @@ function renderPlayerStatsTable(players) {
   const rows = (players || []).map((p) => `
             <tr>
               <td>${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(p.gp)}</td>
               <td>${escapeHtml(p.pa)}</td>
               <td>${escapeHtml(p.ab)}</td>
               <td>${escapeHtml(p.h)}</td>
@@ -458,7 +459,7 @@ function renderPlayerStatsTable(players) {
         <table class="data-table season-totals">
           <thead>
             <tr>
-              <th>選手名</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>選手名</th><th>試合</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
               <th>打率</th><th>出塁率</th><th>長打率</th><th>OPS</th>
             </tr>
           </thead>
@@ -535,7 +536,7 @@ function renderPlayers(container, statsData, statsFailed) {
   if (ranking && Array.isArray(ranking.players) && ranking.players.length) {
     playerStatsHtml = `
       <h3 class="table-title">2026年 個人打撃成績</h3>
-      <p class="placeholder-note">※ 2026年シーズン、全9試合の記録より。</p>
+      <p class="placeholder-note">※ 2026年シーズン、全9試合の記録より。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
       ${renderPlayerStatsTable(ranking.players)}`;
   }
 
