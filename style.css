@@ -723,10 +723,15 @@ img { max-width: 100%; display: block; }
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--red-light);
-  background: rgba(232, 57, 79, 0.1);
   border: 2px solid var(--red-light);
   border-radius: 999px;
   padding: 0.25rem 0.85rem;
+  animation: next-game-text-blink 2.4s ease-in-out infinite;
+}
+
+@keyframes next-game-text-blink {
+  0%, 100% { color: var(--red-light); }
+  50% { color: rgba(232, 57, 79, 0.4); }
 }
 
 .next-game-content {
