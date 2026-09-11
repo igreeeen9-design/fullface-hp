@@ -338,6 +338,31 @@
     padding-top: 0.8rem;
     border-top: 1px dashed #c9d0d4;
   }
+
+  /* ---- 下書き一覧: 保存済みスタメンの中身プレビュー ---- */
+  .draft-preview {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #c9d0d4;
+  }
+  .draft-preview summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent-light);
+  }
+  .draft-preview-lineup {
+    margin: 0.6rem 0 0;
+    padding-left: 1.2rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+  }
+  .draft-preview-bench {
+    margin: 0.5rem 0 0;
+    font-size: 0.8rem;
+    color: #6b7680;
+  }
   .boxscore-player {
     background: #fff;
     border: 1px solid #dde3e6;
@@ -869,16 +894,27 @@ function renderDraftList() {
     const label = d.name ? escapeAttr(d.name) : `案${i + 1}`;
     const opponentLabel = d.opponent ? escapeAttr(d.opponent) : '対戦相手未設定';
     const savedLabel = d.savedAt ? new Date(d.savedAt).toLocaleString('ja-JP') : '';
+    const lineup = d.lineup || [];
+    const bench = d.bench || [];
+    const lineupItems = lineup.length
+      ? lineup.map((p) => `<li>${escapeAttr(p.order)}番　${escapeAttr(p.name) || '(選手名未設定)'}${p.position ? `（${escapeAttr(p.position)}）` : ''}</li>`).join('')
+      : '<li>スタメン未設定</li>';
+    const benchLine = bench.length ? `<p class="draft-preview-bench">控え: ${bench.map(escapeAttr).join('、')}</p>` : '';
     return `
       <div class="entry-row" style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
         <div>
           <strong>${label}</strong>
-          <div class="admin-note" style="margin:0.2rem 0 0;">${opponentLabel}・スタメン${(d.lineup || []).length}人・保存: ${escapeAttr(savedLabel)}</div>
+          <div class="admin-note" style="margin:0.2rem 0 0;">${opponentLabel}・スタメン${lineup.length}人・保存: ${escapeAttr(savedLabel)}</div>
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
           <button type="button" class="admin-btn-link" data-act="loadDraft" data-index="${i}">読み込む</button>
           <button type="button" class="admin-btn-link" data-act="delDraft" data-index="${i}" style="color:var(--red);">削除</button>
         </div>
+        <details class="draft-preview">
+          <summary>内容を見る(スタメン${lineup.length}人)</summary>
+          <ol class="draft-preview-lineup">${lineupItems}</ol>
+          ${benchLine}
+        </details>
       </div>`;
   }).join('');
 }
