@@ -1809,6 +1809,11 @@ function todayJstDateString() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date());
 }
 
+function addDaysToDateString(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 async function fetchGoatCounterTotal(start, end) {
   const token = getGcToken();
   const params = new URLSearchParams({ start });
@@ -1828,9 +1833,12 @@ async function loadAnalytics() {
   box.innerHTML = '<p class="admin-note">読み込み中...</p>';
   try {
     const today = todayJstDateString();
+    // GoatCounterのstats APIは end が排他的境界(その日を含まない)のため、
+    // 「今日」を取得するには end に翌日の日付を指定する必要がある。
+    const tomorrow = addDaysToDateString(today, 1);
     const [total, todayCount] = await Promise.all([
       fetchGoatCounterTotal(GOATCOUNTER_START_DATE),
-      fetchGoatCounterTotal(today, today),
+      fetchGoatCounterTotal(today, tomorrow),
     ]);
     box.innerHTML = `
       <div class="analytics-cards">
