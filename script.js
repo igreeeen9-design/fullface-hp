@@ -515,13 +515,13 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
 
 function renderRoster(container, playersData) {
   const roster = (playersData && Array.isArray(playersData.roster)) ? playersData.roster : [];
-  const rosterRows = roster.map((p) => `
-            <tr><td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td></tr>`).join('');
+  const rosterRows = roster.map((p, i) => `
+            <tr><td>${i + 1}</td><td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td></tr>`).join('');
   container.innerHTML = roster.length ? `
       <div class="table-wrap">
         <table class="data-table roster-table">
           <thead>
-            <tr><th>背番号</th><th>選手名</th><th>主な守備</th></tr>
+            <tr><th>No.</th><th>背番号</th><th>選手名</th><th>主な守備</th></tr>
           </thead>
           <tbody>${rosterRows}</tbody>
         </table>

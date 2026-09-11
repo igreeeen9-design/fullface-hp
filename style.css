@@ -655,9 +655,15 @@ img { max-width: 100%; display: block; }
   color: var(--navy);
 }
 
-.roster-table td:first-child {
+.roster-table td:nth-child(2) {
   font-weight: 700;
   color: var(--navy);
+}
+.roster-table td:first-child,
+.roster-table th:first-child {
+  width: 2.6em;
+  color: #6b7680;
+  text-align: center;
 }
 
 .ranking-grid {
