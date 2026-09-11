@@ -513,15 +513,24 @@ function renderHistory(container, resultsData, statsData, statsFailed) {
   container.innerHTML = parts.join('') + totalHtml;
 }
 
-function renderRoster(container, playersData) {
+function renderRoster(container, playersData, statsData) {
   const roster = (playersData && Array.isArray(playersData.roster)) ? playersData.roster : [];
-  const rosterRows = roster.map((p, i) => `
-            <tr><td>${i + 1}</td><td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td></tr>`).join('');
+  // 2026年シーズンの出場試合数(GP)を選手名で引けるようにしておく。
+  // stats.jsonに登録が無い(=今季まだ記録が無い)選手は0試合として扱う。
+  const gpByName = {};
+  ((statsData && statsData.seasonRanking && Array.isArray(statsData.seasonRanking.players))
+    ? statsData.seasonRanking.players : []).forEach((p) => { gpByName[p.name] = p.gp || 0; });
+  const rosterRows = roster.map((p, i) => {
+    const gp = gpByName[p.name] || 0;
+    const nameClass = gp > 0 ? '' : ' class="roster-name-inactive"';
+    return `
+            <tr><td>${i + 1}</td><td${nameClass}>${escapeHtml(p.name)}</td><td>${escapeHtml(p.number)}</td><td>${escapeHtml(p.position)}</td></tr>`;
+  }).join('');
   container.innerHTML = roster.length ? `
       <div class="table-wrap">
         <table class="data-table roster-table">
           <thead>
-            <tr><th>No.</th><th>背番号</th><th>選手名</th><th>主な守備</th></tr>
+            <tr><th>No.</th><th>選手名</th><th>背番号</th><th>主な守備</th></tr>
           </thead>
           <tbody>${rosterRows}</tbody>
         </table>
@@ -605,7 +614,7 @@ async function loadSiteData() {
   if (rosterEl) {
     try {
       const playersData = await loadJson('data/players.json');
-      renderRoster(rosterEl, playersData);
+      renderRoster(rosterEl, playersData, statsData);
     } catch (e) {
       rosterEl.innerHTML = ERROR_NOTE;
     }

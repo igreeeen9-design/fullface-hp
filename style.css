@@ -655,7 +655,7 @@ img { max-width: 100%; display: block; }
   color: var(--navy);
 }
 
-.roster-table td:nth-child(2) {
+.roster-table td:nth-child(3) {
   font-weight: 700;
   color: var(--navy);
 }
@@ -664,6 +664,9 @@ img { max-width: 100%; display: block; }
   width: 2.6em;
   color: #6b7680;
   text-align: center;
+}
+.roster-name-inactive {
+  color: #b3bac0;
 }
 
 .ranking-grid {
