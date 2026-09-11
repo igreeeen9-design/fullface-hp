@@ -56,6 +56,11 @@
       "position": "投手•外野"
     },
     {
+      "number": "24",
+      "name": "田川",
+      "position": "内野"
+    },
+    {
       "number": "25",
       "name": "大淵",
       "position": "外野・投手"
@@ -99,11 +104,6 @@
       "number": "91",
       "name": "工藤（由）",
       "position": ""
-    },
-    {
-      "number": "24",
-      "name": "田川",
-      "position": "内野"
     }
   ]
 }
