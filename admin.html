@@ -363,6 +363,31 @@
     font-size: 0.8rem;
     color: #6b7680;
   }
+
+  /* ---- アクセス状況 ---- */
+  .analytics-cards {
+    display: flex;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+  }
+  .analytics-card {
+    flex: 1 1 10rem;
+    background: var(--off-white);
+    border: 1px solid #dde3e6;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+  }
+  .analytics-card-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #6b7680;
+  }
+  .analytics-card-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--navy);
+    margin-top: 0.3rem;
+  }
   .boxscore-player {
     background: #fff;
     border: 1px solid #dde3e6;
@@ -489,6 +514,7 @@
     <button type="button" class="admin-tab-btn" data-tab="schedule">試合日程</button>
     <button type="button" class="admin-tab-btn" data-tab="results">試合結果</button>
     <button type="button" class="admin-tab-btn" data-tab="roster">選手名簿</button>
+    <button type="button" class="admin-tab-btn" data-tab="analytics">アクセス状況</button>
   </nav>
 
   <!-- ============ 次戦情報 ============ -->
@@ -635,6 +661,29 @@
     </div>
   </div>
 
+  <!-- ============ アクセス状況 ============ -->
+  <div id="tab-analytics" class="admin-tab-panel" hidden>
+    <section class="admin-card">
+      <h2>アクセス状況</h2>
+      <p class="admin-note">
+        公開サイト(index.html)へのアクセスを<a href="https://www.goatcounter.com/" target="_blank" rel="noopener">GoatCounter</a>で計測しています。
+        公開サイト側にはカウンターは表示されません。同じ人が複数回訪れた場合もそれぞれ1回としてカウントする、シンプルなページビュー(PV)数です。
+      </p>
+      <div id="gcTokenConnected" class="token-connected" style="display:none;">
+        <span>🔗 GoatCounter接続済み</span>
+        <button type="button" class="admin-btn-link" id="changeGcTokenBtn">トークンを変更</button>
+      </div>
+      <div id="gcTokenForm">
+        <div class="field">
+          <label for="gcTokenInput">GoatCounter APIトークン(Read statistics権限)</label>
+          <input type="password" id="gcTokenInput" autocomplete="off" placeholder="例: i11q3arnmdp2u48pv3g...">
+        </div>
+        <button type="button" class="admin-btn admin-btn-primary" id="saveGcTokenBtn">この端末に保存して接続</button>
+      </div>
+      <div id="analyticsInfo" style="margin-top:1rem;"></div>
+    </section>
+  </div>
+
 </main>
 
 <script>
@@ -651,6 +700,11 @@ const FILES = {
 };
 const TOKEN_KEY = 'ffhp_admin_token';
 
+// アクセス状況(GoatCounter)。集計開始日はこの機能を導入した日(それ以前のデータは無い)。
+const GOATCOUNTER_SITE = 'fullface';
+const GOATCOUNTER_START_DATE = '2026-09-11';
+const GC_TOKEN_KEY = 'ffhp_admin_gc_token';
+
 // path ごとに { sha, data } を保持する
 const states = {};
 
@@ -662,6 +716,16 @@ function setToken(t) {
 }
 function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+function getGcToken() {
+  return localStorage.getItem(GC_TOKEN_KEY) || '';
+}
+function setGcToken(t) {
+  localStorage.setItem(GC_TOKEN_KEY, t);
+}
+function clearGcToken() {
+  localStorage.removeItem(GC_TOKEN_KEY);
 }
 
 function utf8ToBase64(str) {
@@ -744,8 +808,14 @@ document.getElementById('adminTabs').addEventListener('click', (e) => {
   ensureTabLoaded(btn.dataset.tab);
 });
 
-let tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false };
+let tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false, analytics: false };
 function ensureTabLoaded(tab) {
+  if (tab === 'analytics') {
+    // アクセス状況はGitHubトークンと無関係(GoatCounter側のトークンで動く)なので、
+    // GitHub未接続でも読み込む。
+    if (!tabsLoaded.analytics) { tabsLoaded.analytics = true; loadAnalytics(); }
+    return;
+  }
   if (!getToken() || tabsLoaded[tab]) return;
   if (tab === 'nextgame') loadNextGame();
   if (tab === 'schedule') loadSchedule();
@@ -1732,6 +1802,75 @@ document.getElementById('addRosterBtn').addEventListener('click', () => {
 });
 document.getElementById('saveRosterBtn').addEventListener('click', saveRoster);
 
+/* ================== アクセス状況(GoatCounter) ================== */
+
+function todayJstDateString() {
+  // 閲覧端末のタイムゾーンに関わらず、日本時間(JST)での「今日」をYYYY-MM-DD形式で返す
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date());
+}
+
+async function fetchGoatCounterTotal(start, end) {
+  const token = getGcToken();
+  const params = new URLSearchParams({ start });
+  if (end) params.set('end', end);
+  const res = await fetch(`https://${GOATCOUNTER_SITE}.goatcounter.com/api/v0/stats/total?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GoatCounter APIエラー (HTTP ${res.status})`);
+  const data = await res.json();
+  return data.total || 0;
+}
+
+async function loadAnalytics() {
+  const box = document.getElementById('analyticsInfo');
+  if (!box) return;
+  if (!getGcToken()) { box.innerHTML = ''; return; }
+  box.innerHTML = '<p class="admin-note">読み込み中...</p>';
+  try {
+    const today = todayJstDateString();
+    const [total, todayCount] = await Promise.all([
+      fetchGoatCounterTotal(GOATCOUNTER_START_DATE),
+      fetchGoatCounterTotal(today, today),
+    ]);
+    box.innerHTML = `
+      <div class="analytics-cards">
+        <div class="analytics-card">
+          <div class="analytics-card-label">累計アクセス数</div>
+          <div class="analytics-card-value">${total.toLocaleString('ja-JP')}</div>
+        </div>
+        <div class="analytics-card">
+          <div class="analytics-card-label">今日のアクセス数</div>
+          <div class="analytics-card-value">${todayCount.toLocaleString('ja-JP')}</div>
+        </div>
+      </div>
+      <p class="admin-note" style="margin-top:0.7rem;">※ 今日のアクセス数は日本時間(JST) 0:00にリセットされます。</p>`;
+  } catch (e) {
+    box.innerHTML = `<p class="admin-note" style="color:var(--red);">読み込みに失敗しました: ${escapeAttr(e.message || String(e))}</p>`;
+  }
+}
+
+function refreshGcTokenUI() {
+  const has = !!getGcToken();
+  document.getElementById('gcTokenConnected').style.display = has ? 'flex' : 'none';
+  document.getElementById('gcTokenForm').style.display = has ? 'none' : 'block';
+}
+
+document.getElementById('saveGcTokenBtn').addEventListener('click', () => {
+  const val = document.getElementById('gcTokenInput').value.trim();
+  if (!val) return;
+  setGcToken(val);
+  refreshGcTokenUI();
+  tabsLoaded.analytics = false;
+  ensureTabLoaded('analytics');
+});
+
+document.getElementById('changeGcTokenBtn').addEventListener('click', () => {
+  clearGcToken();
+  tabsLoaded.analytics = false;
+  refreshGcTokenUI();
+  document.getElementById('analyticsInfo').innerHTML = '';
+});
+
 /* ================== トークン & 初期化 ================== */
 
 function refreshTokenUI() {
@@ -1756,6 +1895,7 @@ document.getElementById('changeTokenBtn').addEventListener('click', () => {
 });
 
 refreshTokenUI();
+refreshGcTokenUI();
 if (getToken()) {
   ensureTabLoaded('nextgame');
 } else {
