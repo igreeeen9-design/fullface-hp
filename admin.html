@@ -80,11 +80,24 @@
     outline: 2px solid var(--accent-light);
     outline-offset: 1px;
   }
-  .lineup-row, .bench-row {
+  .lineup-row {
+    margin-bottom: 0.6rem;
+  }
+  .bench-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.6rem;
+  }
+  .lineup-row-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+  .lineup-row input.comment-input {
+    width: 100%;
+    min-width: 0;
   }
   .row-order {
     flex: 0 0 2.2rem;
@@ -835,17 +848,20 @@ function ensureTabLoaded(tab) {
 
 /* ================== 次戦情報 ================== */
 
-function makeLineupRow(name, number, position) {
+function makeLineupRow(name, number, position, comment) {
   const row = document.createElement('div');
   row.className = 'lineup-row';
   row.innerHTML = `
-    <div class="row-order"></div>
-    <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(name || '')}">
-    <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(number || '')}">
-    <input type="text" class="pos-input" list="positionOptions" placeholder="守備" value="${escapeAttr(position || '')}">
-    <button type="button" class="row-btn" data-act="up" title="上へ">▲</button>
-    <button type="button" class="row-btn" data-act="down" title="下へ">▼</button>
-    <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
+    <div class="lineup-row-main">
+      <div class="row-order"></div>
+      <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(name || '')}">
+      <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(number || '')}">
+      <input type="text" class="pos-input" list="positionOptions" placeholder="守備" value="${escapeAttr(position || '')}">
+      <button type="button" class="row-btn" data-act="up" title="上へ">▲</button>
+      <button type="button" class="row-btn" data-act="down" title="下へ">▼</button>
+      <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
+    </div>
+    <input type="text" class="comment-input" placeholder="コメント（任意）" value="${escapeAttr(comment || '')}">
   `;
   wireRowButtons(row, 'lineupRows');
   return row;
@@ -896,8 +912,8 @@ function renumberLineup() {
 function renderLineup(lineup) {
   const container = document.getElementById('lineupRows');
   container.innerHTML = '';
-  const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', number: '', position: '' }));
-  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.number, p.position)));
+  const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', number: '', position: '', comment: '' }));
+  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.number, p.position, p.comment)));
   renumberLineup();
 }
 
@@ -924,7 +940,8 @@ function collectNextGameForm() {
     name: row.querySelector('.name-input').value.trim(),
     number: row.querySelector('.number-input').value.trim(),
     position: row.querySelector('.pos-input').value.trim(),
-  })).filter((p) => p.name || p.number || p.position);
+    comment: row.querySelector('.comment-input').value.trim(),
+  })).filter((p) => p.name || p.number || p.position || p.comment);
 
   const bench = Array.from(document.querySelectorAll('#benchRows .bench-row')).map((row) => ({
     name: row.querySelector('.name-input').value.trim(),
@@ -989,7 +1006,7 @@ function renderDraftList() {
     const lineup = d.lineup || [];
     const bench = d.bench || [];
     const lineupItems = lineup.length
-      ? lineup.map((p) => `<li>${escapeAttr(p.order)}番　${p.number ? escapeAttr(p.number) + '　' : ''}${escapeAttr(p.name) || '(選手名未設定)'}${p.position ? `（${escapeAttr(p.position)}）` : ''}</li>`).join('')
+      ? lineup.map((p) => `<li>${escapeAttr(p.order)}番　${p.number ? escapeAttr(p.number) + '　' : ''}${escapeAttr(p.name) || '(選手名未設定)'}${p.position ? `（${escapeAttr(p.position)}）` : ''}${p.comment ? `　※${escapeAttr(p.comment)}` : ''}</li>`).join('')
       : '<li>スタメン未設定</li>';
     const benchLine = bench.length ? `<p class="draft-preview-bench">控え: ${bench.map((b) => escapeAttr(benchLabel(b))).join('、')}</p>` : '';
     return `
@@ -1174,7 +1191,7 @@ async function archiveAndClear() {
 }
 
 document.getElementById('addLineupBtn').addEventListener('click', () => {
-  document.getElementById('lineupRows').appendChild(makeLineupRow('', '', ''));
+  document.getElementById('lineupRows').appendChild(makeLineupRow('', '', '', ''));
   renumberLineup();
 });
 document.getElementById('addBenchBtn').addEventListener('click', () => {

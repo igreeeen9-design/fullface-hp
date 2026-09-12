@@ -97,9 +97,9 @@ function renderNextGame(container, data) {
     ? lineup.map((p) => `
         <tr>
           <td>${escapeHtml(p.order)}</td>
-          <td>${escapeHtml(p.name)}</td>
-          <td>${escapeHtml(p.number)}</td>
+          <td>${escapeHtml(p.name)}${p.number ? `<span class="lineup-number">(${escapeHtml(p.number)})</span>` : ''}</td>
           <td>${escapeHtml(p.position)}</td>
+          <td>${escapeHtml(p.comment || '')}</td>
         </tr>`).join('')
     : '<tr class="empty-row"><td colspan="4">スタメン未発表</td></tr>';
 
@@ -121,7 +121,7 @@ function renderNextGame(container, data) {
       <h3>スタメン（予定）</h3>
       <div class="table-wrap">
         <table class="data-table lineup-table">
-          <thead><tr><th>打順</th><th>選手</th><th>背番号</th><th>守備</th></tr></thead>
+          <thead><tr><th>打順</th><th>選手・背番号</th><th>守備</th><th>コメント</th></tr></thead>
           <tbody>${lineupRows}</tbody>
         </table>
       </div>
