@@ -98,6 +98,10 @@
     flex: 1.4;
     min-width: 0;
   }
+  .lineup-row input.number-input {
+    flex: 0 0 3.6rem;
+    min-width: 0;
+  }
   .lineup-row input.pos-input {
     flex: 0.8;
     min-width: 0;
@@ -105,6 +109,9 @@
   .bench-row input {
     flex: 1;
     min-width: 0;
+  }
+  .bench-row input.number-input {
+    flex: 0 0 3.6rem;
   }
   .row-btn {
     flex: 0 0 auto;
@@ -828,12 +835,13 @@ function ensureTabLoaded(tab) {
 
 /* ================== 次戦情報 ================== */
 
-function makeLineupRow(name, position) {
+function makeLineupRow(name, number, position) {
   const row = document.createElement('div');
   row.className = 'lineup-row';
   row.innerHTML = `
     <div class="row-order"></div>
     <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(name || '')}">
+    <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(number || '')}">
     <input type="text" class="pos-input" list="positionOptions" placeholder="守備" value="${escapeAttr(position || '')}">
     <button type="button" class="row-btn" data-act="up" title="上へ">▲</button>
     <button type="button" class="row-btn" data-act="down" title="下へ">▼</button>
@@ -843,11 +851,18 @@ function makeLineupRow(name, position) {
   return row;
 }
 
-function makeBenchRow(name) {
+function benchLabel(b) {
+  if (typeof b === 'string') return b;
+  return [b && b.number, b && b.name].filter(Boolean).join(' ');
+}
+
+function makeBenchRow(item) {
+  const b = (typeof item === 'string') ? { name: item, number: '' } : (item || {});
   const row = document.createElement('div');
   row.className = 'bench-row';
   row.innerHTML = `
-    <input type="text" placeholder="選手名" value="${escapeAttr(name || '')}">
+    <input type="text" class="name-input" placeholder="選手名" value="${escapeAttr(b.name || '')}">
+    <input type="text" class="number-input" placeholder="背番号" value="${escapeAttr(b.number || '')}">
     <button type="button" class="row-btn danger" data-act="del" title="削除">✕</button>
   `;
   wireRowButtons(row, 'benchRows');
@@ -881,15 +896,15 @@ function renumberLineup() {
 function renderLineup(lineup) {
   const container = document.getElementById('lineupRows');
   container.innerHTML = '';
-  const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', position: '' }));
-  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.position)));
+  const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', number: '', position: '' }));
+  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.number, p.position)));
   renumberLineup();
 }
 
 function renderBench(bench) {
   const container = document.getElementById('benchRows');
   container.innerHTML = '';
-  (bench || []).forEach((name) => container.appendChild(makeBenchRow(name)));
+  (bench || []).forEach((item) => container.appendChild(makeBenchRow(item)));
 }
 
 function fillNextGameForm(current) {
@@ -907,10 +922,14 @@ function collectNextGameForm() {
   const lineup = Array.from(document.querySelectorAll('#lineupRows .lineup-row')).map((row, i) => ({
     order: i + 1,
     name: row.querySelector('.name-input').value.trim(),
+    number: row.querySelector('.number-input').value.trim(),
     position: row.querySelector('.pos-input').value.trim(),
-  })).filter((p) => p.name || p.position);
+  })).filter((p) => p.name || p.number || p.position);
 
-  const bench = Array.from(document.querySelectorAll('#benchRows .bench-row input')).map((inp) => inp.value.trim()).filter(Boolean);
+  const bench = Array.from(document.querySelectorAll('#benchRows .bench-row')).map((row) => ({
+    name: row.querySelector('.name-input').value.trim(),
+    number: row.querySelector('.number-input').value.trim(),
+  })).filter((b) => b.name || b.number);
 
   return {
     opponent: document.getElementById('opponentInput').value.trim(),
@@ -970,9 +989,9 @@ function renderDraftList() {
     const lineup = d.lineup || [];
     const bench = d.bench || [];
     const lineupItems = lineup.length
-      ? lineup.map((p) => `<li>${escapeAttr(p.order)}番　${escapeAttr(p.name) || '(選手名未設定)'}${p.position ? `（${escapeAttr(p.position)}）` : ''}</li>`).join('')
+      ? lineup.map((p) => `<li>${escapeAttr(p.order)}番　${p.number ? escapeAttr(p.number) + '　' : ''}${escapeAttr(p.name) || '(選手名未設定)'}${p.position ? `（${escapeAttr(p.position)}）` : ''}</li>`).join('')
       : '<li>スタメン未設定</li>';
-    const benchLine = bench.length ? `<p class="draft-preview-bench">控え: ${bench.map(escapeAttr).join('、')}</p>` : '';
+    const benchLine = bench.length ? `<p class="draft-preview-bench">控え: ${bench.map((b) => escapeAttr(benchLabel(b))).join('、')}</p>` : '';
     return `
       <div class="entry-row" style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; flex-wrap:wrap;">
         <div>
@@ -1155,7 +1174,7 @@ async function archiveAndClear() {
 }
 
 document.getElementById('addLineupBtn').addEventListener('click', () => {
-  document.getElementById('lineupRows').appendChild(makeLineupRow('', ''));
+  document.getElementById('lineupRows').appendChild(makeLineupRow('', '', ''));
   renumberLineup();
 });
 document.getElementById('addBenchBtn').addEventListener('click', () => {

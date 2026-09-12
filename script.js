@@ -98,12 +98,16 @@ function renderNextGame(container, data) {
         <tr>
           <td>${escapeHtml(p.order)}</td>
           <td>${escapeHtml(p.name)}</td>
+          <td>${escapeHtml(p.number)}</td>
           <td>${escapeHtml(p.position)}</td>
         </tr>`).join('')
-    : '<tr class="empty-row"><td colspan="3">スタメン未発表</td></tr>';
+    : '<tr class="empty-row"><td colspan="4">スタメン未発表</td></tr>';
 
   const benchItems = bench.length
-    ? bench.map((name) => `<li>${escapeHtml(name)}</li>`).join('')
+    ? bench.map((b) => {
+        const item = (typeof b === 'string') ? { name: b, number: '' } : (b || {});
+        return `<li>${escapeHtml([item.number, item.name].filter(Boolean).join(' '))}</li>`;
+      }).join('')
     : '<li>未定</li>';
 
   container.innerHTML = `
@@ -117,7 +121,7 @@ function renderNextGame(container, data) {
       <h3>スタメン（予定）</h3>
       <div class="table-wrap">
         <table class="data-table lineup-table">
-          <thead><tr><th>打順</th><th>選手</th><th>守備</th></tr></thead>
+          <thead><tr><th>打順</th><th>選手</th><th>背番号</th><th>守備</th></tr></thead>
           <tbody>${lineupRows}</tbody>
         </table>
       </div>

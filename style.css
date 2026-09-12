@@ -860,7 +860,13 @@ img { max-width: 100%; display: block; }
   min-width: 0;
 }
 
-.lineup-table td:first-child {
+/* 「背番号」は3文字あるため、列が数字1〜2桁分の幅しか取らないと縦に折り返される */
+.lineup-table th:nth-child(3) {
+  white-space: nowrap;
+}
+
+.lineup-table td:first-child,
+.lineup-table td:nth-child(3) {
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--accent-light);
@@ -869,7 +875,7 @@ img { max-width: 100%; display: block; }
 
 /* スタメン表の選手名・守備は一目で分かるよう、どちらも大きく・太く強調する */
 .lineup-table td:nth-child(2),
-.lineup-table td:nth-child(3) {
+.lineup-table td:nth-child(4) {
   font-size: 1.15rem;
   font-weight: 800;
   color: var(--navy);
@@ -1045,7 +1051,7 @@ img { max-width: 100%; display: block; }
 
   /* スマホでも選手名・守備がひと目でわかるよう、縮小後もはっきり大きく見えるサイズを保つ */
   .lineup-table td:nth-child(2),
-  .lineup-table td:nth-child(3) {
+  .lineup-table td:nth-child(4) {
     font-size: 1.05rem;
   }
 
