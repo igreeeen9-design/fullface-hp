@@ -10,61 +10,71 @@
         "order": 1,
         "name": "中西",
         "number": "4",
-        "position": "左"
+        "position": "左",
+        "comment": ""
       },
       {
         "order": 2,
         "name": "田中",
         "number": "8",
-        "position": "三"
+        "position": "三",
+        "comment": ""
       },
       {
         "order": 3,
         "name": "桑原",
         "number": "19",
-        "position": "DH"
+        "position": "DH",
+        "comment": ""
       },
       {
         "order": 4,
         "name": "森",
         "number": "6",
-        "position": "一"
+        "position": "一",
+        "comment": ""
       },
       {
         "order": 5,
         "name": "真鍋",
         "number": "7",
-        "position": "投"
+        "position": "投",
+        "comment": ""
       },
       {
         "order": 6,
         "name": "髙橋",
         "number": "17",
-        "position": "二"
+        "position": "二",
+        "comment": ""
       },
       {
         "order": 7,
         "name": "道下",
         "number": "13",
-        "position": "右"
+        "position": "右",
+        "comment": ""
       },
       {
         "order": 8,
         "name": "大淵",
         "number": "25",
-        "position": "捕"
+        "position": "捕",
+        "comment": ""
       },
       {
         "order": 9,
         "name": "藤岡",
         "number": "77",
-        "position": "中"
+        "position": "中",
+        "comment": ""
       },
       {
         "order": 10,
         "name": "古賀",
         "number": "16",
-        "position": "遊"
+        "position": "遊",
+        "comment": "リリーフあるよ"
       }
     ],
     "bench": [
@@ -74,7 +84,7 @@
       }
     ],
     "note": "試合前に集合写真撮ります。",
-    "updatedAt": "2026-09-12T11:56:43.410Z"
+    "updatedAt": "2026-09-12T11:58:50.311Z"
   },
   "drafts": [
     {
