@@ -9,6 +9,55 @@
       "era": "current",
       "games": [
         {
+          "date": "2026-09-13",
+          "dateLabel": "2026/09/13(日)",
+          "opponent": "PanaSpirits",
+          "score": "5 - 6",
+          "resultLabel": "敗",
+          "resultClass": "lose",
+          "venue": "北谷運動公園",
+          "detail": {
+            "type": "linescore",
+            "innings": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7"
+            ],
+            "rows": [
+              {
+                "team": "パナスピリッツ",
+                "values": [
+                  "0",
+                  "1",
+                  "1",
+                  "2",
+                  "0",
+                  "0",
+                  "2"
+                ],
+                "total": "6"
+              },
+              {
+                "team": "フルフェイス",
+                "values": [
+                  "0",
+                  "0",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "4"
+                ],
+                "total": "5"
+              }
+            ]
+          }
+        },
+        {
           "date": "2026-08-30",
           "dateLabel": "2026/08/30(日)",
           "opponent": "ジャビッツ",
@@ -332,16 +381,6 @@
               }
             ]
           }
-        },
-        {
-          "date": "2026-09-13",
-          "dateLabel": "2026/09/13(日)",
-          "opponent": "PanaSpirits",
-          "score": "5 - 6",
-          "resultLabel": "敗",
-          "resultClass": "lose",
-          "venue": "北谷運動公園",
-          "detail": null
         }
       ]
     },
