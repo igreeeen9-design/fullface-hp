@@ -1,90 +1,14 @@
 {
   "current": {
-    "opponent": "Pana Spirits",
-    "date": "2026-09-13",
-    "startTime": "09:00",
-    "meetTime": "08:20",
-    "location": "北谷運動公園",
-    "lineup": [
-      {
-        "order": 1,
-        "name": "中西",
-        "number": "4",
-        "position": "左",
-        "comment": ""
-      },
-      {
-        "order": 2,
-        "name": "田中",
-        "number": "8",
-        "position": "三",
-        "comment": ""
-      },
-      {
-        "order": 3,
-        "name": "桑原",
-        "number": "19",
-        "position": "DH",
-        "comment": ""
-      },
-      {
-        "order": 4,
-        "name": "森",
-        "number": "6",
-        "position": "一",
-        "comment": ""
-      },
-      {
-        "order": 5,
-        "name": "真鍋",
-        "number": "7",
-        "position": "投",
-        "comment": ""
-      },
-      {
-        "order": 6,
-        "name": "髙橋",
-        "number": "17",
-        "position": "二",
-        "comment": ""
-      },
-      {
-        "order": 7,
-        "name": "道下",
-        "number": "13",
-        "position": "右",
-        "comment": ""
-      },
-      {
-        "order": 8,
-        "name": "大淵",
-        "number": "25",
-        "position": "捕",
-        "comment": ""
-      },
-      {
-        "order": 9,
-        "name": "藤岡",
-        "number": "77",
-        "position": "中",
-        "comment": ""
-      },
-      {
-        "order": 10,
-        "name": "古賀",
-        "number": "16",
-        "position": "遊",
-        "comment": "リリーフあるよ"
-      }
-    ],
-    "bench": [
-      {
-        "name": "井口😷",
-        "number": ""
-      }
-    ],
-    "note": "試合前に集合写真撮ります。",
-    "updatedAt": "2026-09-12T11:58:50.311Z"
+    "opponent": "",
+    "date": "",
+    "startTime": "",
+    "meetTime": "",
+    "location": "",
+    "lineup": [],
+    "bench": [],
+    "note": "",
+    "updatedAt": "2026-09-13T06:42:37.007Z"
   },
   "drafts": [
     {
@@ -154,5 +78,94 @@
     }
   ],
   "defaultOrder": null,
-  "history": []
+  "history": [
+    {
+      "opponent": "Pana Spirits",
+      "date": "2026-09-13",
+      "startTime": "09:00",
+      "meetTime": "08:20",
+      "location": "北谷運動公園",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "中西",
+          "number": "4",
+          "position": "左",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "田中",
+          "number": "8",
+          "position": "DH",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "桑原",
+          "number": "19",
+          "position": "投",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "森",
+          "number": "6",
+          "position": "一",
+          "comment": ""
+        },
+        {
+          "order": 5,
+          "name": "真鍋",
+          "number": "7",
+          "position": "三",
+          "comment": ""
+        },
+        {
+          "order": 6,
+          "name": "髙橋",
+          "number": "17",
+          "position": "二",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "道下",
+          "number": "13",
+          "position": "右",
+          "comment": ""
+        },
+        {
+          "order": 8,
+          "name": "大淵",
+          "number": "25",
+          "position": "捕",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "藤岡",
+          "number": "77",
+          "position": "中",
+          "comment": ""
+        },
+        {
+          "order": 10,
+          "name": "古賀",
+          "number": "16",
+          "position": "遊",
+          "comment": "リリーフあるよ"
+        }
+      ],
+      "bench": [
+        {
+          "name": "井口😷",
+          "number": ""
+        }
+      ],
+      "note": "試合前に集合写真撮ります。",
+      "updatedAt": "2026-09-13T06:42:37.006Z",
+      "archivedAt": "2026-09-13T06:42:37.007Z"
+    }
+  ]
 }
