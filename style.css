@@ -769,6 +769,49 @@ img { max-width: 100%; display: block; }
   color: #fff;
 }
 
+.raw-data-block {
+  margin-top: 1rem;
+}
+
+.raw-data-toggle {
+  background: none;
+  border: 1px solid var(--accent-light);
+  color: var(--accent-light);
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.raw-data-toggle:hover {
+  background: var(--accent-light);
+  color: #fff;
+}
+
+.raw-data-toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.raw-data-content:not([hidden]) {
+  margin-top: 0.8rem;
+}
+
+.raw-data-table {
+  min-width: 760px;
+}
+
+.raw-data-table th,
+.raw-data-table td {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.78rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .detail-row td {
   background: var(--off-white);
   padding: 1.2rem;
@@ -1128,6 +1171,21 @@ img { max-width: 100%; display: block; }
 
   .results-table .detail-toggle-suffix {
     display: none;
+  }
+
+  .raw-data-toggle {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .raw-data-table {
+    min-width: 640px;
+  }
+
+  .raw-data-table th,
+  .raw-data-table td {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.72rem;
   }
 
   /* ボックススコアは列数が多いため横スクロール前提。スマホではさらに詰めて横スクロール量を減らす */

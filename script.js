@@ -252,6 +252,98 @@ function renderGameDetail(detail) {
   return '';
 }
 
+/* ---- 記録データ(試合の元CSVをそのまま表示) ----
+   admin.htmlのCSV取り込みで data/raw-games/{date}.csv に保存された生データを、
+   加工・再集計せずそのままの値・項目で表として見せるための機能。
+   results.json側に新しいフィールドを追加せず、既存の game.date から
+   ファイルパスを直接組み立てることで重複データを作らないようにしている。 */
+
+// admin.htmlのparseCsvTextと同じ簡易CSVパーサ(ダブルクォート内の改行・カンマ・""に対応)
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  const s = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n') {
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  row.push(field);
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+  return rows;
+}
+
+// CSVの行・列・数値・表記はそのまま、表として見やすくするための整形のみ行う
+// (列数がずれている行があっても崩れないよう、最大列数に合わせて空セルを補う)
+function renderRawCsvTable(rows) {
+  if (!rows.length) return '<p class="placeholder-note">この試合の記録データはまだ登録されていません。</p>';
+  const colCount = rows.reduce((max, r) => Math.max(max, r.length), 0);
+  const body = rows.map((r) => {
+    let cells = '';
+    for (let i = 0; i < colCount; i++) {
+      const html = escapeHtml(r[i] || '').replace(/\n/g, '<br>');
+      cells += `<td>${html}</td>`;
+    }
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `
+                <p class="placeholder-note">※ 試合の元データ(スコア記録表)をそのまま表示しています。数値・項目の加工や再計算は行っていません。</p>
+                <div class="table-wrap">
+                  <table class="data-table raw-data-table">
+                    <tbody>${body}</tbody>
+                  </table>
+                </div>`;
+}
+
+function renderRawDataBlock(game) {
+  const src = `data/raw-games/${game.date}.csv`;
+  return `
+                <div class="raw-data-block">
+                  <button class="raw-data-toggle" type="button" data-raw-src="${escapeHtml(src)}">記録データ<span class="detail-toggle-suffix">を見る</span></button>
+                  <div class="raw-data-content" hidden></div>
+                </div>`;
+}
+
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('.raw-data-toggle');
+  if (!button) return;
+  const content = button.nextElementSibling;
+  if (!content) return;
+  const wasOpen = !content.hidden;
+  if (!wasOpen && !button.dataset.loaded) {
+    button.disabled = true;
+    try {
+      const res = await fetch(button.dataset.rawSrc, { cache: 'no-store' });
+      if (!res.ok) throw new Error('raw csv not found');
+      const text = await res.text();
+      content.innerHTML = renderRawCsvTable(parseCsvText(text));
+    } catch (e) {
+      content.innerHTML = '<p class="placeholder-note">この試合の記録データはまだ登録されていません。</p>';
+    }
+    button.dataset.loaded = '1';
+    button.disabled = false;
+  }
+  content.hidden = wasOpen;
+  const suffix = button.querySelector('.detail-toggle-suffix');
+  if (suffix) suffix.textContent = wasOpen ? 'を見る' : 'を閉じる';
+});
+
 function renderResultsGroup(group) {
   const rows = (group.games || []).map((g) => {
     const hasBoxscore = !!(g.boxscore && Array.isArray(g.boxscore.headers) && Array.isArray(g.boxscore.rows) && g.boxscore.rows.length);
@@ -260,10 +352,12 @@ function renderResultsGroup(group) {
       ? '<button class="detail-toggle" type="button">詳細<span class="detail-toggle-suffix">を見る</span></button>' : '';
     // 試合結果(イニング別得点)と個人成績(ボックススコア)は別々のデータとして
     // 保存されているため(既存データを壊さないための互換設計)、両方あれば
-    // 同じ詳細欄の中に並べて表示する
+    // 同じ詳細欄の中に並べて表示する。「記録データ」は元CSVが保存されている
+    // 2026年度以降の試合(detail.type === 'linescore')にのみ表示する
     const detailBlocks = [
       g.detail ? renderGameDetail(g.detail) : '',
       hasBoxscore ? renderGameDetail({ type: 'boxscore', headers: g.boxscore.headers, rows: g.boxscore.rows }) : '',
+      (g.detail && g.detail.type === 'linescore') ? renderRawDataBlock(g) : '',
     ].filter(Boolean).join('');
     // detail-cell-inner: 中の個人成績表(ボックススコア)は横に長いが、それに引っ張られて
     // 試合結果テーブル本体まで横スクロールが必要にならないよう、専用のCSSで幅の伝播を止める
