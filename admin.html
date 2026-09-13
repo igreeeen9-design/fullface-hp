@@ -1960,6 +1960,9 @@ function parseGameCsv(rows) {
   const home = /フルフェイス/.test(s1.name) ? s1 : s2;
   const away = /フルフェイス/.test(s1.name) ? s2 : s1;
   if (!/フルフェイス/.test(home.name)) throw new Error('「フルフェイス」の得点行が見つかりません。');
+  // 先攻・後攻はCSVに書かれた行の順番(scoreRow1が先攻)がそのまま試合の実際の順番なので、
+  // 表示用にはs1/s2の並びをそのまま保持する(home/awayは自チーム判定用の別名に過ぎない)
+  const scoreRowsInOrder = [s1, s2];
 
   const battingHeaderIdx = findCsvRowIndex(rows, (r) => (r[0] || '').trim() === '打順', inningHeaderIdx);
   if (battingHeaderIdx === -1) throw new Error('「打順」から始まる見出し行が見つかりません。');
@@ -1987,7 +1990,7 @@ function parseGameCsv(rows) {
   }
   if (!players.length) throw new Error('打撃成績の選手行が見つかりません。');
 
-  return { opponent, date, time, venue, group, home, away, players };
+  return { opponent, date, time, venue, group, home, away, scoreRowsInOrder, players };
 }
 
 // 日付文字列(9/13 または 2026-09-13)をISO形式(YYYY-MM-DD)にする。年が書かれていない
@@ -2052,10 +2055,12 @@ function buildGameImportFromCsv(csvText) {
     detail: {
       type: 'linescore',
       innings: parsed.home.values.map((_, i) => String(i + 1)),
-      rows: [
-        { team: parsed.opponent, values: parsed.away.values, total: parsed.away.total },
-        { team: 'フルフェイス', values: parsed.home.values, total: parsed.home.total },
-      ],
+      // 先攻・後攻はCSVに書かれていた行の順番をそのまま使う(常に相手を1行目には固定しない)
+      rows: parsed.scoreRowsInOrder.map((s) => ({
+        team: /フルフェイス/.test(s.name) ? 'フルフェイス' : parsed.opponent,
+        values: s.values,
+        total: s.total,
+      })),
     },
     boxscore: {
       headers: BOXSCORE_HEADERS,
