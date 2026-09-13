@@ -52,6 +52,15 @@ function escapeHtml(str) {
   }[c]));
 }
 
+// 球場名をGoogleマップの検索結果に飛ばすリンクにする。緯度経度は持っていないため
+// 施設名での検索頼みになる(「交流戦」のように球場名でない値が入っている場合も
+// あるが、その場合はただ検索結果が的外れになるだけで表示は壊れない)
+function venueLink(name) {
+  if (!name) return '';
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+  return `<a class="venue-link" href="${url}" target="_blank" rel="noopener">${escapeHtml(name)}</a>`;
+}
+
 // 「2026/09/13(日)」のような日付表記はスペースが無く折り返せないため、スマホの狭い表内で
 // 1文字ずつ縦に折り返される・逆に表全体が広がってしまう、のどちらにもならないよう
 // 曜日の「(」の前にだけ改行可能位置(wbr)を入れる
@@ -114,7 +123,7 @@ function renderNextGame(container, data) {
     <dl class="about-facts next-game-meta">
       <div class="fact"><dt>対戦相手</dt><dd>${escapeHtml(g.opponent)}</dd></div>
       <div class="fact"><dt>試合日時</dt><dd>${escapeHtml(formatGameDate(g.date, g.startTime))}</dd></div>
-      <div class="fact"><dt>試合会場</dt><dd>${escapeHtml(g.location) || '未定'}</dd></div>
+      <div class="fact"><dt>試合会場</dt><dd>${g.location ? venueLink(g.location) : '未定'}</dd></div>
       <div class="fact"><dt>集合時間</dt><dd>${escapeHtml(g.meetTime) || '未定'}</dd></div>
     </dl>
     <div class="next-game-lineup">
@@ -154,7 +163,7 @@ function renderHeroNextGame(data) {
     <p class="hero-next-game-label">NEXT GAME</p>
     <p class="hero-next-game-datetime">${escapeHtml(formatGameDate(g.date, g.startTime))}</p>
     <p class="hero-next-game-opponent">vs ${escapeHtml(g.opponent)}</p>
-    ${g.location ? `<p class="hero-next-game-venue">@ ${escapeHtml(g.location)}</p>` : ''}
+    ${g.location ? `<p class="hero-next-game-venue">@ ${venueLink(g.location)}</p>` : ''}
     <a href="#next-game" class="hero-next-game-link">試合詳細を見る</a>
   `;
 }
@@ -196,7 +205,7 @@ function renderSchedule(container, data) {
         <tr>
           <td>${formatDateOnly(g.date) ? formatDateCell(formatDateOnly(g.date)) : '未定'}</td>
           <td>${escapeHtml(g.opponent)}</td>
-          <td>${escapeHtml(g.location || '未定')}</td>
+          <td>${g.location ? venueLink(g.location) : '未定'}</td>
           <td>${escapeHtml(g.time || '未定')}</td>
         </tr>`).join('');
   container.innerHTML = `
@@ -269,7 +278,7 @@ function renderResultsGroup(group) {
               <td>${escapeHtml(g.opponent)}</td>
               <td>${escapeHtml(g.score)}</td>
               <td class="result-${escapeHtml(g.resultClass)}">${escapeHtml(g.resultLabel)}</td>
-              <td>${escapeHtml(g.venue)}</td>
+              <td>${venueLink(g.venue)}</td>
               <td>${detailCell}</td>
             </tr>${detailRow}`;
   }).join('');

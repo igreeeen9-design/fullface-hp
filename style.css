@@ -36,6 +36,17 @@ body {
 
 a { color: inherit; text-decoration: none; }
 
+/* 球場名からGoogleマップを開けるリンク。色は周囲の文字を継承しつつ
+   下線でクリックできることが分かるようにする */
+.venue-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.venue-link:hover {
+  opacity: 0.75;
+}
+
 img { max-width: 100%; display: block; }
 
 /* Header */
