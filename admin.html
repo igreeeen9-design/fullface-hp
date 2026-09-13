@@ -669,7 +669,7 @@
       <p class="admin-note">
         スコア記録表(Googleスプレッドシート)を「ファイル→ダウンロード→カンマ区切り形式(.csv)」で書き出してアップロードすると、
         試合結果(<code>results.json</code>)と個人成績・TOP5ランキング(<code>stats.json</code>)をまとめて計算します。
-        反映前に必ず内容を確認できます。盗塁・投手の勝敗はここでは自動反映されません。
+        反映前に必ず内容を確認できます。盗塁の通算数・TOP5も自動更新されます。投手の勝敗はここでは自動反映されません。
       </p>
       <div class="field">
         <label for="csvFileInput">試合CSVファイル(1試合分)</label>
@@ -1836,8 +1836,8 @@ document.getElementById('saveResultsBtn').addEventListener('click', saveResults)
    results.json(試合結果)とstats.json(個人成績・TOP5)を計算して更新する。
    打席結果の判定は「安打かどうか・何塁打か」「四球/死球/犠打(飛)か」だけを見ればよく、
    守備位置の書き方(二飛・遊ゴロ等)は一切集計に使わないため、自由記述のままでも
-   ほぼ書き換えなしで解析できる。盗塁・投手の勝敗は自動反映せず、検出結果を
-   注記するだけに留める(通算データを保持していない/入力欄が無いため)。 */
+   ほぼ書き換えなしで解析できる。盗塁も通算数・TOP5まで自動更新する。投手の
+   勝敗だけは判定に使えるデータ(勝敗の決定)がCSV側に無いため対象外。 */
 
 // RFC4180相当の簡易CSVパーサ(ダブルクォートで囲んだセル内の改行・カンマ・""に対応)
 function parseCsvText(text) {
@@ -2085,12 +2085,14 @@ function parseRateValue(s) {
 }
 
 // stats.jsonのplayers配列に、この試合の成績を加算する(通算成績の再計算)。
-// 選手がまだ登録されていない場合は新規に追加する。
+// 選手がまだ登録されていない場合は新規に追加する。盗塁(sb)も打撃成績と同じ
+// タイミング・同じ重複防止(mergeGameIntoResultsの日付チェック)の下で加算するため、
+// 二重取り込みによる二重加算は打撃成績と同様に防がれる。
 function applyBattingStatsToPlayers(players, playerStats) {
   playerStats.forEach((p) => {
     let rec = players.find((x) => x.name === p.name);
     if (!rec) {
-      rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
+      rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, sb: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
       players.push(rec);
     }
     rec.gp += 1;
@@ -2100,6 +2102,7 @@ function applyBattingStatsToPlayers(players, playerStats) {
     rec.b2 += p.stats.B2;
     rec.b3 += p.stats.B3;
     rec.hr += p.stats.HR;
+    rec.sb = (rec.sb || 0) + p.sb;
     const avg = rec.ab ? rec.h / rec.ab : 0;
     const obp = rec.pa ? (rec.h + (rec.pa - rec.ab)) / rec.pa : 0;
     const tb = rec.h + rec.b2 + 2 * rec.b3 + 3 * rec.hr;
@@ -2136,8 +2139,8 @@ function buildCountCategory(players, label, field) {
   return { label, entries: mergeTiesIntoTopRows(sorted, (p) => p[field] || 0, (v) => String(v)) };
 }
 
-// 打率・出塁率・長打率・OPS・安打・本塁打のTOP5を再計算する。盗塁・勝利数は
-// stats.jsonに選手ごとの通算値を保持していないため、既存の内容をそのまま引き継ぐ。
+// 打率・出塁率・長打率・OPS・安打・本塁打・盗塁のTOP5を再計算する。勝利数だけは
+// 投手の勝敗を判定するデータをそもそも持っていないため、既存の内容をそのまま引き継ぐ。
 function recomputeSeasonCategories(seasonRanking) {
   const players = seasonRanking.players;
   const newCategories = [
@@ -2147,9 +2150,10 @@ function recomputeSeasonCategories(seasonRanking) {
     buildRateCategory(players, 'OPS', 'ops'),
     buildCountCategory(players, '安打', 'h'),
     buildCountCategory(players, '本塁打', 'hr'),
+    buildCountCategory(players, '盗塁', 'sb'),
   ];
   (seasonRanking.categories || []).forEach((c) => {
-    if (c.label === '盗塁' || c.label === '勝利数') newCategories.push(c);
+    if (c.label === '勝利数') newCategories.push(c);
   });
   seasonRanking.categories = newCategories;
 }
@@ -2204,16 +2208,12 @@ function renderCsvPreviewHtml(imp) {
       <td>${escapeAttr(p.name)}</td>
       <td>${p.stats.PA}</td><td>${p.stats.AB}</td><td>${p.stats.H}</td>
       <td>${p.stats.B2}</td><td>${p.stats.B3}</td><td>${p.stats.HR}</td>
-      <td>${p.rbi}</td>
+      <td>${p.rbi}</td><td>${p.sb}</td>
       <td>${before ? escapeAttr(before.avg) : '(新規選手)'}</td>
     </tr>`;
   }).join('');
   const newPlayerNote = newPlayers.length
     ? `<p class="admin-note" style="color:var(--red); margin-top:0.6rem;">⚠ 黄色の行は個人成績に登録の無い選手名です。表記ゆれ(異体字・スペースの有無など)で別人として登録されていないか確認してください: ${newPlayers.map(escapeAttr).join('、')}</p>`
-    : '';
-  const sbList = playerStats.filter((p) => p.sb > 0);
-  const sbNote = sbList.length
-    ? `<p class="admin-note" style="color:var(--red); margin-top:0.6rem;">⚠ スコア表から盗塁を検出しましたが、通算盗塁数は自動更新されません。反映する場合は「選手名簿」ではなく個人成績ページのTOP5(盗塁)を手動で編集してください: ${sbList.map((p) => `${escapeAttr(p.name)} ${p.sb}個`).join('、')}</p>`
     : '';
   return `
     <div class="admin-note" style="background:#eef3f7; padding:0.8rem; border-radius:8px;">
@@ -2224,13 +2224,12 @@ function renderCsvPreviewHtml(imp) {
     <div class="csv-preview-table-wrap">
       <table class="csv-preview-table">
         <thead><tr>
-          <th>選手</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th><th>打点</th><th>更新前打率</th>
+          <th>選手</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th><th>打点</th><th>盗塁</th><th>更新前打率</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
     ${newPlayerNote}
-    ${sbNote}
     <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">この内容でresults.json・stats.jsonを更新する</button>
     <p class="admin-note" id="csvCommitNote" style="margin-top:0.5rem;"></p>
   `;
