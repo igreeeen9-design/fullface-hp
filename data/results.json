@@ -1,11 +1,11 @@
 {
-  "leagueTotal": "リーグ通算:9試合 3勝6敗0引分",
+  "leagueTotal": "リーグ通算:10試合 3勝7敗0引分",
   "historyTotal": "通算(2023〜2025年):21試合 13勝7敗1引分",
   "groups": [
     {
       "id": "season-2026-league",
       "title": "2026年度 Gリーグ福岡(リーグ戦)",
-      "record": "3勝4敗0引分",
+      "record": "3勝5敗0引分",
       "era": "current",
       "games": [
         {
@@ -332,6 +332,16 @@
               }
             ]
           }
+        },
+        {
+          "date": "2026-09-13",
+          "dateLabel": "2026/09/13(日)",
+          "opponent": "PanaSpirits",
+          "score": "5 - 6",
+          "resultLabel": "敗",
+          "resultClass": "lose",
+          "venue": "北谷運動公園",
+          "detail": null
         }
       ]
     },
