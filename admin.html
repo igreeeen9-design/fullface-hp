@@ -278,6 +278,28 @@
     margin-bottom: 0.7rem;
     background: var(--off-white);
   }
+  .csv-preview-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.8rem;
+  }
+  .csv-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .csv-preview-table th, .csv-preview-table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid #dde3e6;
+    text-align: right;
+  }
+  .csv-preview-table th:first-child, .csv-preview-table td:first-child {
+    text-align: left;
+  }
+  .csv-preview-table thead th {
+    background: var(--navy);
+    color: #fff;
+  }
   .entry-row-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -641,6 +663,22 @@
   <!-- ============ 試合結果 ============ -->
   <div id="tab-results" class="admin-tab-panel" hidden>
     <datalist id="rosterPlayersDatalist"></datalist>
+
+    <section class="admin-card">
+      <h2>CSVから試合結果を取り込む</h2>
+      <p class="admin-note">
+        スコア記録表(Googleスプレッドシート)を「ファイル→ダウンロード→カンマ区切り形式(.csv)」で書き出してアップロードすると、
+        試合結果(<code>results.json</code>)と個人成績・TOP5ランキング(<code>stats.json</code>)をまとめて計算します。
+        反映前に必ず内容を確認できます。盗塁・投手の勝敗はここでは自動反映されません。
+      </p>
+      <div class="field">
+        <label for="csvFileInput">試合CSVファイル(1試合分)</label>
+        <input type="file" id="csvFileInput" accept=".csv,text/csv">
+      </div>
+      <button type="button" class="admin-btn admin-btn-secondary" id="csvParseBtn">読み込んでプレビュー</button>
+      <div id="csvPreviewArea" style="margin-top:1rem;"></div>
+    </section>
+
     <section class="admin-card">
       <h2>試合結果</h2>
       <p class="admin-note">
@@ -720,6 +758,7 @@ const FILES = {
   schedule: 'data/schedule.json',
   results: 'data/results.json',
   roster: 'data/players.json',
+  stats: 'data/stats.json',
 };
 const TOKEN_KEY = 'ffhp_admin_token';
 
@@ -1791,6 +1830,484 @@ async function saveResults() {
 }
 
 document.getElementById('saveResultsBtn').addEventListener('click', saveResults);
+
+/* ================== CSVから試合結果を取り込む ==================
+   スコア記録表(Googleスプレッドシート)をCSVでエクスポートしたものを読み込み、
+   results.json(試合結果)とstats.json(個人成績・TOP5)を計算して更新する。
+   打席結果の判定は「安打かどうか・何塁打か」「四球/死球/犠打(飛)か」だけを見ればよく、
+   守備位置の書き方(二飛・遊ゴロ等)は一切集計に使わないため、自由記述のままでも
+   ほぼ書き換えなしで解析できる。盗塁・投手の勝敗は自動反映せず、検出結果を
+   注記するだけに留める(通算データを保持していない/入力欄が無いため)。 */
+
+// RFC4180相当の簡易CSVパーサ(ダブルクォートで囲んだセル内の改行・カンマ・""に対応)
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  const s = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n') {
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  row.push(field);
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+  return rows;
+}
+
+function zenkakuDigitsToHalf(str) {
+  return String(str || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
+// スコア記録表では「髙橋」のように異体字で書かれることがあり、選手名簿・stats.json側の
+// 表記(高橋)と一致しないと別選手として扱われてしまう。既知の異体字だけ標準字体に
+// 揃えておく(新しい表記ゆれが見つかった場合はこの対応表に追加する)。
+const KANJI_VARIANT_MAP = { '髙': '高', '﨑': '崎', '齋': '斎', '齊': '斉', '德': '徳', '桒': '桑' };
+function normalizePlayerName(name) {
+  return String(name || '').replace(/[髙﨑齋齊德桒]/g, (c) => KANJI_VARIANT_MAP[c] || c);
+}
+
+// 1打席分のセルを既存のAT_BAT_OUTCOMESコード(1B/2B/3B/HR/BB/HBP/SO/OUT/SH/SF)に分類する。
+// 守備位置や「◯ゴロ」「◯飛」といった書き方は結果に一切影響しない(すべてOUT扱い)。
+function classifyPlateAppearanceCell(raw) {
+  const text = String(raw || '');
+  if (!text.trim()) return null;
+  const halfText = zenkakuDigitsToHalf(text);
+  const rbiMatch = /打点(\d+)/.exec(halfText);
+  const sbMatch = /盗塁(\d+)/.exec(halfText);
+  const rbi = rbiMatch ? Number(rbiMatch[1]) : 0;
+  const sb = sbMatch ? Number(sbMatch[1]) : 0;
+
+  let code;
+  if (text.includes('四球')) code = 'BB';
+  else if (text.includes('死球')) code = 'HBP';
+  else if (text.includes('犠')) code = text.includes('飛') ? 'SF' : 'SH';
+  else if (text.includes('本塁打')) code = 'HR';
+  else if (halfText.includes('3安')) code = '3B';
+  else if (halfText.includes('2安')) code = '2B';
+  else if (text.includes('安')) code = '1B';
+  else if (text.includes('三振')) code = 'SO';
+  else code = 'OUT';
+
+  return { code, rbi, sb };
+}
+
+function findCsvRowIndex(rows, predicate, fromIndex) {
+  for (let i = (fromIndex || 0); i < rows.length; i++) {
+    if (predicate(rows[i])) return i;
+  }
+  return -1;
+}
+
+// スコア記録表のCSVを構造化する。列の位置は決め打ちにせず、「VS」「チーム名」「計」
+// 「打順」といった見出しセルを目印に探すことで、列がひとつずれても壊れにくくしている。
+function parseGameCsv(rows) {
+  const headerIdx = findCsvRowIndex(rows, (r) => (r[0] || '').trim() === 'VS');
+  if (headerIdx === -1) throw new Error('「VS」から始まる見出し行が見つかりません。テンプレート通りの形式か確認してください。');
+  const headerRow = rows[headerIdx];
+  const opponent = (headerRow[1] || '').trim();
+  if (!opponent) throw new Error('対戦相手(VSの隣のセル)が空です。');
+  const restCells = headerRow.slice(2).map((c) => (c || '').trim()).filter(Boolean);
+  let date = '', time = '', venue = '', group = '';
+  restCells.forEach((cell) => {
+    const half = zenkakuDigitsToHalf(cell);
+    if (/^\d{1,2}\/\d{1,2}$/.test(half) || /^\d{4}-\d{2}-\d{2}$/.test(half)) date = half;
+    else if (/^\d{1,2}:\d{2}$/.test(half)) time = half;
+    else if (cell.includes('リーグ戦') || cell.includes('交流戦')) group = cell.includes('交流戦') ? 'interleague' : 'league';
+    else if (!venue) venue = cell;
+  });
+  if (!date) throw new Error('試合日(例: 9/13)が見出し行から見つかりません。');
+  if (!group) group = 'league'; // 区分の指定が無ければリーグ戦として扱う
+
+  const inningHeaderIdx = findCsvRowIndex(rows, (r) => r.some((c) => (c || '').trim() === '計'), headerIdx + 1);
+  if (inningHeaderIdx === -1) throw new Error('イニング見出し行(「計」を含む行)が見つかりません。');
+  const inningHeaderRow = rows[inningHeaderIdx];
+  const totalColIdx = inningHeaderRow.findIndex((c) => (c || '').trim() === '計');
+  const teamNameColIdx = inningHeaderRow.findIndex((c) => (c || '').trim() === 'チーム名');
+  if (teamNameColIdx === -1) throw new Error('「チーム名」列が見つかりません。');
+  const inningCols = [];
+  for (let i = teamNameColIdx + 1; i < totalColIdx; i++) {
+    if ((inningHeaderRow[i] || '').trim() !== '') inningCols.push(i);
+  }
+  if (!inningCols.length) throw new Error('イニング列(1,2,3...)が見つかりません。');
+
+  function readScoreRow(r) {
+    const name = (r[teamNameColIdx] || '').trim();
+    const values = inningCols.map((i) => zenkakuDigitsToHalf((r[i] || '').trim() || '0'));
+    const total = zenkakuDigitsToHalf((r[totalColIdx] || '').trim());
+    return { name, values, total };
+  }
+  const scoreRow1 = rows[inningHeaderIdx + 1];
+  const scoreRow2 = rows[inningHeaderIdx + 2];
+  if (!scoreRow1 || !scoreRow2) throw new Error('チームごとの得点行が2行そろっていません。');
+  const s1 = readScoreRow(scoreRow1);
+  const s2 = readScoreRow(scoreRow2);
+  const home = /フルフェイス/.test(s1.name) ? s1 : s2;
+  const away = /フルフェイス/.test(s1.name) ? s2 : s1;
+  if (!/フルフェイス/.test(home.name)) throw new Error('「フルフェイス」の得点行が見つかりません。');
+
+  const battingHeaderIdx = findCsvRowIndex(rows, (r) => (r[0] || '').trim() === '打順', inningHeaderIdx);
+  if (battingHeaderIdx === -1) throw new Error('「打順」から始まる見出し行が見つかりません。');
+  const battingHeaderRow = rows[battingHeaderIdx];
+  const battingInningCols = [];
+  battingHeaderRow.forEach((c, i) => { if (/回$/.test((c || '').trim())) battingInningCols.push(i); });
+  if (!battingInningCols.length) throw new Error('打撃成績表のイニング列(1回,2回...)が見つかりません。');
+  const nameColIdx = 1, numberColIdx = 2, positionColIdx = 3;
+
+  const players = [];
+  for (let i = battingHeaderIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const allEmpty = r.every((c) => !(c || '').trim());
+    if (allEmpty) break;
+    if ((r[0] || '').trim() === '投手成績') break;
+    const name = normalizePlayerName((r[nameColIdx] || '').trim());
+    if (!name) continue;
+    players.push({
+      order: zenkakuDigitsToHalf((r[0] || '').trim()) || '99',
+      name,
+      number: zenkakuDigitsToHalf((r[numberColIdx] || '').trim()),
+      position: (r[positionColIdx] || '').trim(),
+      cellTexts: battingInningCols.map((ci) => (r[ci] || '').trim()).filter(Boolean),
+    });
+  }
+  if (!players.length) throw new Error('打撃成績の選手行が見つかりません。');
+
+  return { opponent, date, time, venue, group, home, away, players };
+}
+
+// 日付文字列(9/13 または 2026-09-13)をISO形式(YYYY-MM-DD)にする。年が書かれていない
+// 場合は取り込み時点の年を補う(年をまたいだ試合を後から取り込む場合は要手動修正)。
+function normalizeGameDate(dateStr) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const m = /^(\d{1,2})\/(\d{1,2})$/.exec(dateStr);
+  if (!m) throw new Error(`日付の形式を解釈できません: ${dateStr}`);
+  const year = new Date().getFullYear();
+  return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+}
+
+function formatDateLabelForResult(isoDate) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate || '');
+  if (!m) return isoDate || '';
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const w = days[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
+  return `${y}/${String(mo).padStart(2, '0')}/${String(d).padStart(2, '0')}(${w})`;
+}
+
+// 選手ごとに全打席のセルをまとめ、既存のcomputeStatsFromAtBats(⚾個人成績を入力パネルと同じ関数)
+// で1試合分の成績を計算する。打順が同じでも選手名が違えば別選手として扱う(交代選手対応)。
+function buildGameImportFromCsv(csvText) {
+  const rows = parseCsvText(csvText);
+  const parsed = parseGameCsv(rows);
+
+  const nameMap = new Map();
+  parsed.players.forEach((p) => {
+    if (!nameMap.has(p.name)) nameMap.set(p.name, { order: p.order, position: p.position, atBats: [], rbi: 0, sb: 0 });
+    const entry = nameMap.get(p.name);
+    p.cellTexts.forEach((text) => {
+      const cell = classifyPlateAppearanceCell(text);
+      if (!cell) return;
+      entry.atBats.push(cell.code);
+      entry.rbi += cell.rbi;
+      entry.sb += cell.sb;
+    });
+  });
+
+  const playerStats = [];
+  nameMap.forEach((entry, name) => {
+    playerStats.push({ name, order: entry.order, position: entry.position, stats: computeStatsFromAtBats(entry.atBats), rbi: entry.rbi, sb: entry.sb });
+  });
+  playerStats.sort((a, b) => Number(a.order) - Number(b.order));
+
+  const isoDate = normalizeGameDate(parsed.date);
+  const ownTotal = Number(parsed.home.total || 0);
+  const oppTotal = Number(parsed.away.total || 0);
+  let resultClass = 'draw', resultLabel = '分';
+  if (ownTotal > oppTotal) { resultClass = 'win'; resultLabel = '勝'; }
+  else if (ownTotal < oppTotal) { resultClass = 'lose'; resultLabel = '敗'; }
+
+  const game = {
+    date: isoDate,
+    dateLabel: formatDateLabelForResult(isoDate),
+    opponent: parsed.opponent,
+    score: `${ownTotal} - ${oppTotal}`,
+    resultLabel,
+    resultClass,
+    venue: parsed.venue,
+    detail: {
+      type: 'linescore',
+      innings: parsed.home.values.map((_, i) => String(i + 1)),
+      rows: [
+        { team: parsed.opponent, values: parsed.away.values, total: parsed.away.total },
+        { team: 'フルフェイス', values: parsed.home.values, total: parsed.home.total },
+      ],
+    },
+    boxscore: {
+      headers: BOXSCORE_HEADERS,
+      rows: playerStats.map((p) => [
+        p.order, p.name, p.position,
+        String(p.stats.PA), String(p.stats.AB), String(p.stats.H),
+        String(p.stats.B1), String(p.stats.B2), String(p.stats.B3), String(p.stats.HR),
+        String(p.rbi), '0',
+        String(p.stats.SO), String(p.stats.BB), String(p.stats.HBP),
+        String(p.stats.SH), String(p.stats.SF),
+      ]),
+    },
+  };
+
+  return { game, group: parsed.group, playerStats, groupLabel: parsed.group === 'interleague' ? '交流戦' : 'リーグ戦', timeText: parsed.time };
+}
+
+function fmtRateStat(x) {
+  const s = x.toFixed(3);
+  if (s.startsWith('-0.')) return '-' + s.slice(2);
+  return s.startsWith('0.') ? s.slice(1) : s;
+}
+
+function parseRateValue(s) {
+  if (typeof s !== 'string') return Number(s) || 0;
+  return s.startsWith('.') ? Number('0' + s) : Number(s);
+}
+
+// stats.jsonのplayers配列に、この試合の成績を加算する(通算成績の再計算)。
+// 選手がまだ登録されていない場合は新規に追加する。
+function applyBattingStatsToPlayers(players, playerStats) {
+  playerStats.forEach((p) => {
+    let rec = players.find((x) => x.name === p.name);
+    if (!rec) {
+      rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
+      players.push(rec);
+    }
+    rec.gp += 1;
+    rec.pa += p.stats.PA;
+    rec.ab += p.stats.AB;
+    rec.h += p.stats.H;
+    rec.b2 += p.stats.B2;
+    rec.b3 += p.stats.B3;
+    rec.hr += p.stats.HR;
+    const avg = rec.ab ? rec.h / rec.ab : 0;
+    const obp = rec.pa ? (rec.h + (rec.pa - rec.ab)) / rec.pa : 0;
+    const tb = rec.h + rec.b2 + 2 * rec.b3 + 3 * rec.hr;
+    const slg = rec.ab ? tb / rec.ab : 0;
+    rec.avg = fmtRateStat(avg);
+    rec.obp = fmtRateStat(obp);
+    rec.slg = fmtRateStat(slg);
+    rec.ops = fmtRateStat(obp + slg);
+  });
+}
+
+// 同じ数値のプレイヤーは「・」でつないで1行にまとめる(既存データの表記に合わせた仕様)
+function mergeTiesIntoTopRows(sorted, valueFn, formatFn) {
+  const rows = [];
+  let i = 0;
+  while (i < sorted.length && rows.length < 5) {
+    const v = valueFn(sorted[i]);
+    if (v <= 0) break;
+    const names = [];
+    while (i < sorted.length && valueFn(sorted[i]) === v) { names.push(sorted[i].name); i++; }
+    rows.push({ name: names.join('・'), value: formatFn(v) });
+  }
+  return rows;
+}
+
+function buildRateCategory(players, label, field) {
+  const qualified = players.filter((p) => p.pa >= 3); // 3打席以上のみ対象(既存のhistoryRankingsと同じ基準)
+  const sorted = [...qualified].sort((a, b) => parseRateValue(b[field]) - parseRateValue(a[field]));
+  return { label, entries: mergeTiesIntoTopRows(sorted, (p) => parseRateValue(p[field]), fmtRateStat) };
+}
+
+function buildCountCategory(players, label, field) {
+  const sorted = [...players].sort((a, b) => (b[field] || 0) - (a[field] || 0));
+  return { label, entries: mergeTiesIntoTopRows(sorted, (p) => p[field] || 0, (v) => String(v)) };
+}
+
+// 打率・出塁率・長打率・OPS・安打・本塁打のTOP5を再計算する。盗塁・勝利数は
+// stats.jsonに選手ごとの通算値を保持していないため、既存の内容をそのまま引き継ぐ。
+function recomputeSeasonCategories(seasonRanking) {
+  const players = seasonRanking.players;
+  const newCategories = [
+    buildRateCategory(players, '打率', 'avg'),
+    buildRateCategory(players, '出塁率', 'obp'),
+    buildRateCategory(players, '長打率', 'slg'),
+    buildRateCategory(players, 'OPS', 'ops'),
+    buildCountCategory(players, '安打', 'h'),
+    buildCountCategory(players, '本塁打', 'hr'),
+  ];
+  (seasonRanking.categories || []).forEach((c) => {
+    if (c.label === '盗塁' || c.label === '勝利数') newCategories.push(c);
+  });
+  seasonRanking.categories = newCategories;
+}
+
+// results.jsonの該当グループに試合を追加し、日付降順に並べ替えて記録・通算成績を更新する。
+function mergeGameIntoResults(resultsData, game, groupKey) {
+  const groupId = groupKey === 'interleague' ? 'season-2026-interleague' : 'season-2026-league';
+  const group = (resultsData.groups || []).find((g) => g.id === groupId);
+  if (!group) throw new Error(`グループ「${groupId}」がresults.jsonに見つかりません。手動での追加が必要です。`);
+  // 対戦相手名の表記ゆれ(例:「Pana Spirits」/「PanaSpirits」)があっても重複を確実に
+  // 検知できるよう、日付だけで判定する(1日に同じ相手と2試合することは想定していない)
+  const dup = (resultsData.groups || [])
+    .filter((g) => g.era === 'current')
+    .flatMap((g) => g.games)
+    .find((g) => g.date === game.date);
+  if (dup) throw new Error(`同じ日付(${game.date})の試合が既にresults.jsonに登録されています(対戦相手: ${dup.opponent})。重複していないか確認してください。`);
+  group.games.push(game);
+  group.games.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  group.record = computeRecord(group.games);
+  resultsData.leagueTotal = recomputeTotal(resultsData.leagueTotal, resultsData.groups.filter((g) => g.era === 'current'));
+}
+
+// JSON以外の生テキスト(CSVの控え)をリポジトリに書き込むための、ghPutの薄いバリエーション
+async function ghPutRawText(path, textContent, sha, message) {
+  const content = utf8ToBase64(textContent);
+  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message, content, sha, branch: CONFIG.branch }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`CSVの保存に失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+let pendingCsvImport = null;
+
+function renderCsvPreviewHtml(imp) {
+  const { game, playerStats, groupLabel, statsData } = imp;
+  const newPlayers = [];
+  const rows = playerStats.map((p) => {
+    const before = statsData.seasonRanking.players.find((x) => x.name === p.name);
+    if (!before) newPlayers.push(p.name);
+    return `<tr${before ? '' : ' style="background:#fff3cd;"'}>
+      <td>${escapeAttr(p.name)}</td>
+      <td>${p.stats.PA}</td><td>${p.stats.AB}</td><td>${p.stats.H}</td>
+      <td>${p.stats.B2}</td><td>${p.stats.B3}</td><td>${p.stats.HR}</td>
+      <td>${p.rbi}</td>
+      <td>${before ? escapeAttr(before.avg) : '(新規選手)'}</td>
+    </tr>`;
+  }).join('');
+  const newPlayerNote = newPlayers.length
+    ? `<p class="admin-note" style="color:var(--red); margin-top:0.6rem;">⚠ 黄色の行は個人成績に登録の無い選手名です。表記ゆれ(異体字・スペースの有無など)で別人として登録されていないか確認してください: ${newPlayers.map(escapeAttr).join('、')}</p>`
+    : '';
+  const sbList = playerStats.filter((p) => p.sb > 0);
+  const sbNote = sbList.length
+    ? `<p class="admin-note" style="color:var(--red); margin-top:0.6rem;">⚠ スコア表から盗塁を検出しましたが、通算盗塁数は自動更新されません。反映する場合は「選手名簿」ではなく個人成績ページのTOP5(盗塁)を手動で編集してください: ${sbList.map((p) => `${escapeAttr(p.name)} ${p.sb}個`).join('、')}</p>`
+    : '';
+  return `
+    <div class="admin-note" style="background:#eef3f7; padding:0.8rem; border-radius:8px;">
+      <strong>${escapeAttr(game.opponent)}</strong>(${escapeAttr(game.dateLabel)}・${escapeAttr(groupLabel)})<br>
+      ${escapeAttr(game.venue || '会場未設定')}${imp.timeText ? `・${escapeAttr(imp.timeText)}〜` : ''}<br>
+      スコア ${escapeAttr(game.score)}(${escapeAttr(game.resultLabel)})
+    </div>
+    <div class="csv-preview-table-wrap">
+      <table class="csv-preview-table">
+        <thead><tr>
+          <th>選手</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th><th>打点</th><th>更新前打率</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${newPlayerNote}
+    ${sbNote}
+    <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">この内容でresults.json・stats.jsonを更新する</button>
+    <p class="admin-note" id="csvCommitNote" style="margin-top:0.5rem;"></p>
+  `;
+}
+
+document.getElementById('csvParseBtn').addEventListener('click', async () => {
+  const previewArea = document.getElementById('csvPreviewArea');
+  const fileInput = document.getElementById('csvFileInput');
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) {
+    previewArea.innerHTML = '<p class="admin-note" style="color:var(--red);">CSVファイルを選択してください。</p>';
+    return;
+  }
+  previewArea.innerHTML = '<p class="admin-note">解析中...</p>';
+  try {
+    const csvText = await file.text();
+    const built = buildGameImportFromCsv(csvText);
+
+    const [resultsJson, statsJson] = await Promise.all([ghGet(FILES.results), ghGet(FILES.stats)]);
+    const resultsData = JSON.parse(base64ToUtf8(resultsJson.content));
+    const statsData = JSON.parse(base64ToUtf8(statsJson.content));
+
+    pendingCsvImport = {
+      csvText,
+      game: built.game,
+      group: built.group,
+      groupLabel: built.groupLabel,
+      timeText: built.timeText,
+      playerStats: built.playerStats,
+      resultsData, resultsSha: resultsJson.sha,
+      statsData, statsSha: statsJson.sha,
+    };
+    previewArea.innerHTML = renderCsvPreviewHtml(pendingCsvImport);
+    document.getElementById('csvCommitBtn').addEventListener('click', commitCsvImport);
+  } catch (e) {
+    previewArea.innerHTML = `<p class="admin-note" style="color:var(--red);">${escapeAttr(e.message || String(e))}</p>`;
+  }
+});
+
+async function commitCsvImport() {
+  const btn = document.getElementById('csvCommitBtn');
+  const note = document.getElementById('csvCommitNote');
+  btn.disabled = true;
+  note.textContent = '反映中...';
+  try {
+    const imp = pendingCsvImport;
+    mergeGameIntoResults(imp.resultsData, imp.game, imp.group);
+    applyBattingStatsToPlayers(imp.statsData.seasonRanking.players, imp.playerStats);
+    recomputeSeasonCategories(imp.statsData.seasonRanking);
+
+    const r1 = await ghPut(FILES.results, imp.resultsData, imp.resultsSha, `試合結果を追加(CSV取り込み): ${imp.game.opponent}`);
+    states.results = { sha: r1.content.sha, data: imp.resultsData };
+    tabsLoaded.results = false;
+
+    const r2 = await ghPut(FILES.stats, imp.statsData, imp.statsSha, `個人成績を更新(CSV取り込み): ${imp.game.opponent}`);
+
+    try {
+      await ghPutRawText(`data/raw-games/${imp.game.date}.csv`, imp.csvText, undefined, `生スコアCSVを保存: ${imp.game.date}`);
+    } catch (e) {
+      // CSVの控え保存に失敗しても、本体(results.json/stats.json)の更新は既に成功しているので処理は続行する
+    }
+
+    note.textContent = '';
+    document.getElementById('csvPreviewArea').innerHTML = '<p class="admin-note">✅ 試合結果と個人成績を更新しました。1分ほどでサイトに反映されます。</p>';
+    document.getElementById('csvFileInput').value = '';
+    pendingCsvImport = null;
+    lastGroupIndex = 0;
+    renderResultsGroupSelect();
+    document.getElementById('resultsGroupSelect').value = '0';
+    renderResultsGameList();
+  } catch (e) {
+    note.textContent = '';
+    note.innerHTML = `<span style="color:var(--red);">${escapeAttr(e.message || String(e))}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 /* ================== 選手名簿 ================== */
 
