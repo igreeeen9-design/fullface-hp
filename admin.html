@@ -2149,7 +2149,7 @@ function buildCountCategory(players, label, field, minValue) {
 
 // 打率・出塁率・長打率・OPS・安打・本塁打・打点・盗塁のTOP5を再計算する。勝利数だけは
 // 投手の勝敗を判定するデータをそもそも持っていないため、既存の内容をそのまま引き継ぐ。
-// 打点だけは1〜2打点の選手が多く並んで見づらいため、3打点以上のみを対象にする。
+// 打点だけは1打点の選手が多く並んで見づらいため、2打点以上のみを対象にする。
 function recomputeSeasonCategories(seasonRanking) {
   const players = seasonRanking.players;
   const newCategories = [
@@ -2159,7 +2159,7 @@ function recomputeSeasonCategories(seasonRanking) {
     buildRateCategory(players, 'OPS', 'ops'),
     buildCountCategory(players, '安打', 'h'),
     buildCountCategory(players, '本塁打', 'hr'),
-    buildCountCategory(players, '打点', 'rbi', 3),
+    buildCountCategory(players, '打点', 'rbi', 2),
     buildCountCategory(players, '盗塁', 'sb'),
   ];
   (seasonRanking.categories || []).forEach((c) => {
