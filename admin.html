@@ -2097,7 +2097,7 @@ function applyBattingStatsToPlayers(players, playerStats) {
   playerStats.forEach((p) => {
     let rec = players.find((x) => x.name === p.name);
     if (!rec) {
-      rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, sb: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
+      rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
       players.push(rec);
     }
     rec.gp += 1;
@@ -2107,6 +2107,7 @@ function applyBattingStatsToPlayers(players, playerStats) {
     rec.b2 += p.stats.B2;
     rec.b3 += p.stats.B3;
     rec.hr += p.stats.HR;
+    rec.rbi = (rec.rbi || 0) + p.rbi;
     rec.sb = (rec.sb || 0) + p.sb;
     const avg = rec.ab ? rec.h / rec.ab : 0;
     const obp = rec.pa ? (rec.h + (rec.pa - rec.ab)) / rec.pa : 0;
@@ -2144,7 +2145,7 @@ function buildCountCategory(players, label, field) {
   return { label, entries: mergeTiesIntoTopRows(sorted, (p) => p[field] || 0, (v) => String(v)) };
 }
 
-// 打率・出塁率・長打率・OPS・安打・本塁打・盗塁のTOP5を再計算する。勝利数だけは
+// 打率・出塁率・長打率・OPS・安打・本塁打・打点・盗塁のTOP5を再計算する。勝利数だけは
 // 投手の勝敗を判定するデータをそもそも持っていないため、既存の内容をそのまま引き継ぐ。
 function recomputeSeasonCategories(seasonRanking) {
   const players = seasonRanking.players;
@@ -2155,6 +2156,7 @@ function recomputeSeasonCategories(seasonRanking) {
     buildRateCategory(players, 'OPS', 'ops'),
     buildCountCategory(players, '安打', 'h'),
     buildCountCategory(players, '本塁打', 'hr'),
+    buildCountCategory(players, '打点', 'rbi'),
     buildCountCategory(players, '盗塁', 'sb'),
   ];
   (seasonRanking.categories || []).forEach((c) => {

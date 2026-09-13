@@ -470,6 +470,7 @@ function renderPlayerStatsTable(players) {
               <td>${escapeHtml(p.b2)}</td>
               <td>${escapeHtml(p.b3)}</td>
               <td>${escapeHtml(p.hr)}</td>
+              <td>${escapeHtml(p.rbi)}</td>
               <td>${escapeHtml(p.avg)}</td>
               <td>${escapeHtml(p.obp)}</td>
               <td>${escapeHtml(p.slg)}</td>
@@ -480,7 +481,7 @@ function renderPlayerStatsTable(players) {
         <table class="data-table season-totals">
           <thead>
             <tr>
-              <th>選手名</th><th>試合</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>選手名</th><th>試合</th><th>打席</th><th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th><th>打点</th>
               <th>打率</th><th>出塁率</th><th>長打率</th><th>OPS</th>
             </tr>
           </thead>
