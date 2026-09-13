@@ -621,7 +621,7 @@
 
     <div class="admin-actions">
       <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">公開する</button>
-      <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終えて次の試合へ(履歴に保存してクリア)</button>
+      <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終了(履歴に保存し、次の試合を自動セット)</button>
     </div>
   </div>
 
@@ -1165,8 +1165,28 @@ async function saveCurrent() {
   }
 }
 
+// 「試合開始時刻」欄は<input type="time">のため、値は"HH:MM"(ゼロ埋め・24時間表記)
+// でないとブラウザに無視されて空欄になってしまう。schedule.jsonの time は
+// "9:00"のような自由入力なので、次戦情報にセットする前に整形する。
+function normalizeTimeForInput(t) {
+  const m = t && /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+}
+
+// schedule.jsonの中から、日付が確定していて今日(JST)より後の試合のうち、
+// もっとも近いものを返す。日付未定の試合(date: null)や終了済みの試合は対象外。
+// schedule.json側の終了済みエントリは自動削除しないので、日付フィルタで除く。
+function findNextScheduledGame(scheduleData) {
+  const today = todayJstDateString();
+  const games = (scheduleData && Array.isArray(scheduleData.games)) ? scheduleData.games : [];
+  const upcoming = games
+    .filter((g) => g.date && g.date > today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return upcoming[0] || null;
+}
+
 async function archiveAndClear() {
-  if (!confirm('現在の次戦情報を履歴に保存し、フォームを空にします。よろしいですか?')) return;
+  if (!confirm('現在の次戦情報を履歴に保存し、試合日程から次の試合を自動セットします。よろしいですか?')) return;
   const btn = document.getElementById('archiveBtn');
   btn.disabled = true;
   showStatus('loading', '履歴に保存中...');
@@ -1176,13 +1196,22 @@ async function archiveAndClear() {
     const data = states.nextGame.data;
     const history = data.history || [];
     const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
-    const blankCurrent = { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
+
+    const scheduleJson = await ghGet(FILES.schedule);
+    const scheduleData = JSON.parse(base64ToUtf8(scheduleJson.content));
+    const nextGame = findNextScheduledGame(scheduleData);
+
+    const blankCurrent = nextGame
+      ? { opponent: nextGame.opponent || '', date: nextGame.date || '', startTime: normalizeTimeForInput(nextGame.time), meetTime: '', location: nextGame.location || '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() }
+      : { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     const newData = { current: blankCurrent, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: newHistory };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存してクリア');
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
     states.nextGame = { sha: json.content.sha, data: newData };
     fillNextGameForm(blankCurrent);
     renderNextGameStatus();
-    showStatus('ok', '履歴に保存し、フォームをクリアしました。');
+    showStatus('ok', nextGame
+      ? `履歴に保存し、次の試合(${nextGame.opponent})を自動セットしました。集合時間だけ入力して公開してください。`
+      : '履歴に保存しました。試合日程に次の試合が見つからなかったため、フォームは空のままです。');
   } catch (e) {
     showStatus('err', e.message || String(e));
   } finally {
