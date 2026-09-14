@@ -44,7 +44,51 @@ document.addEventListener('click', (event) => {
   if (suffix) suffix.textContent = isOpen ? 'を見る' : 'を閉じる';
 });
 
-/* ---- Next Game (data/next-game.json を読み込んで表示) ---- */
+/* ---- サイト全体のお知らせ通知(data/notice.json) ----
+   「NEXT GAMEカードの上に何か新着があることだけ知らせる」ための、既存カード本体には
+   手を加えないオーバーレイ通知。表示する文言はdata/notice.jsonを書き換えるだけで
+   差し替えられる(例: 「10月の試合予定を更新しました」「ランキングを更新しました」等)。
+   既読管理はnoticeのidをlocalStorageに保存するだけのシンプルな仕組み。 */
+const NOTICE_SEEN_KEY = 'ffhp_seen_notice_id';
+
+function getSeenNoticeId() {
+  try {
+    return localStorage.getItem(NOTICE_SEEN_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+function setSeenNoticeId(id) {
+  try {
+    localStorage.setItem(NOTICE_SEEN_KEY, id);
+  } catch (e) {
+    // localStorageが使えない環境(プライベートブラウズ等)では既読管理を諦めるだけで、
+    // 表示自体は問題なく動作させる
+  }
+}
+
+async function loadSiteNotice() {
+  const el = document.getElementById('siteNotice');
+  const textEl = document.getElementById('siteNoticeText');
+  if (!el || !textEl) return;
+  try {
+    const res = await fetch('data/notice.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('failed to load notice.json');
+    const notice = await res.json();
+    if (!notice || !notice.id || !notice.message) return;
+    const isNew = getSeenNoticeId() !== notice.id;
+    if (!isNew) return;
+    textEl.textContent = notice.message;
+    el.href = notice.link || '#next-game';
+    el.hidden = false;
+    setSeenNoticeId(notice.id);
+  } catch (e) {
+    // お知らせの読み込みに失敗しても、既存のNEXT GAME表示など他の機能には影響させない
+  }
+}
+
+loadSiteNotice();
 
 function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({

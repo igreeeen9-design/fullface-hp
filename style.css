@@ -286,11 +286,17 @@ img { max-width: 100%; display: block; }
   color: #e7ecee;
 }
 
-/* トップページ: 次の試合を主役にしたハイライトカード(黒+赤で少しスポーティーに) */
-.hero-next-game {
+/* NEXT GAMEカード(+サイト通知)をまとめる外枠。カード自体の見た目は変えず、
+   通知チップをカード上端に重ねて置くための基準位置(position: relative)だけ持つ */
+.hero-next-game-wrap {
   position: relative;
   margin: 2.4rem auto 0;
   max-width: 420px;
+}
+
+/* トップページ: 次の試合を主役にしたハイライトカード(黒+赤で少しスポーティーに) */
+.hero-next-game {
+  position: relative;
   padding: 1.5rem 1.6rem 1.7rem;
   background: linear-gradient(165deg, var(--navy-dark) 0%, #000 130%);
   border: 1px solid rgba(232, 57, 79, 0.35);
@@ -892,6 +898,57 @@ img { max-width: 100%; display: block; }
   gap: 2rem;
 }
 
+/* サイト通知(NEW): NEXT GAMEカードの中身には手を加えず、カード上端に軽く重ねる
+   小さな通知チップ。カード本体より少し幅を狭くして「上に乗っている」見た目にする */
+.site-notice[hidden] {
+  display: none;
+}
+
+.site-notice {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 88%;
+  padding: 0.5rem 0.9rem;
+  background: #fff;
+  color: var(--navy);
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  text-decoration: none;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.site-notice:hover {
+  transform: translate(-50%, -50%) translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+}
+
+.site-notice-tag {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--red-light);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+.site-notice-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
 .next-game-meta {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.4rem;
@@ -1098,8 +1155,11 @@ img { max-width: 100%; display: block; }
     height: 168px;
   }
 
-  .hero-next-game {
+  .hero-next-game-wrap {
     margin-top: 1.4rem;
+  }
+
+  .hero-next-game {
     padding: 1rem 1.2rem 1.3rem;
   }
 
