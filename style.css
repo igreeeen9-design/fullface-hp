@@ -773,22 +773,28 @@ img { max-width: 100%; display: block; }
   margin-top: 1rem;
 }
 
+/* 記録データボタン: 一般の閲覧者の目には留まりにくいよう、通常のボタンではなく
+   ごく控えめなテキストリンクとして表示する(機能自体は他のtoggleボタンと同じ)。
+   タップ領域は上下のpaddingで確保しつつ、見た目には出さない */
 .raw-data-toggle {
+  display: inline-block;
   background: none;
-  border: 1px solid var(--accent-light);
-  color: var(--accent-light);
-  border-radius: 999px;
-  padding: 0.3rem 0.9rem;
-  font-size: 0.8rem;
-  font-weight: 700;
+  border: none;
+  padding: 0.6rem 0.1rem;
+  margin: -0.6rem -0.1rem;
+  color: #b3b8bd;
+  font-size: 0.68rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
 
-.raw-data-toggle:hover {
-  background: var(--accent-light);
-  color: #fff;
+.raw-data-toggle:hover,
+.raw-data-toggle:focus-visible {
+  color: #8a9198;
 }
 
 .raw-data-toggle:disabled {
@@ -1174,8 +1180,7 @@ img { max-width: 100%; display: block; }
   }
 
   .raw-data-toggle {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.7rem;
+    font-size: 0.66rem;
   }
 
   .raw-data-table {
