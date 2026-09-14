@@ -565,6 +565,28 @@
   <!-- ============ 次戦情報 ============ -->
   <div id="tab-nextgame" class="admin-tab-panel">
 
+    <section class="admin-card" id="noticeCard">
+      <h2>サイトのお知らせ</h2>
+      <p class="admin-note">トップページのNEXT GAMEカード上に「NEW」として重ねて表示される通知です。保存すると、まだ見ていない端末に新着として表示されます(一度見た端末では自動的に消えます)。</p>
+      <p class="admin-note" id="noticeCurrentInfo">読み込み中...</p>
+      <div class="field">
+        <label for="noticeMessageInput">お知らせメッセージ</label>
+        <input type="text" id="noticeMessageInput" maxlength="40" placeholder="例: 10月の試合予定を更新しました">
+        <p class="admin-note" id="noticeMessageCount" style="margin-top:0.3rem;">0/40文字(20文字程度までを目安に、短く分かりやすい文章にしてください)</p>
+      </div>
+      <div class="field">
+        <label for="noticeLinkSelect">リンク先</label>
+        <select id="noticeLinkSelect">
+          <option value="#next-game">次戦情報</option>
+          <option value="#schedule">試合日程</option>
+          <option value="#results">試合結果</option>
+          <option value="#players">個人成績</option>
+          <option value="#players">ランキング</option>
+        </select>
+      </div>
+      <button type="button" class="admin-btn admin-btn-primary" id="saveNoticeBtn">お知らせを更新</button>
+    </section>
+
     <section class="admin-card" id="nextGameStatusCard">
       <h2>状態</h2>
       <div id="nextGameStatusInfo"></div>
@@ -759,6 +781,15 @@ const FILES = {
   results: 'data/results.json',
   roster: 'data/players.json',
   stats: 'data/stats.json',
+  notice: 'data/notice.json',
+};
+
+// お知らせのリンク先プルダウンに表示するラベル(値=サイト側のセクションID)
+const NOTICE_LINK_LABELS = {
+  '#next-game': '次戦情報',
+  '#schedule': '試合日程',
+  '#results': '試合結果',
+  '#players': '個人成績・ランキング',
 };
 const TOKEN_KEY = 'ffhp_admin_token';
 
@@ -870,7 +901,7 @@ document.getElementById('adminTabs').addEventListener('click', (e) => {
   ensureTabLoaded(btn.dataset.tab);
 });
 
-let tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false, analytics: false };
+let tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false, analytics: false, notice: false };
 function ensureTabLoaded(tab) {
   if (tab === 'analytics') {
     // アクセス状況はGitHubトークンと無関係(GoatCounter側のトークンで動く)なので、
@@ -879,7 +910,12 @@ function ensureTabLoaded(tab) {
     return;
   }
   if (!getToken() || tabsLoaded[tab]) return;
-  if (tab === 'nextgame') loadNextGame();
+  if (tab === 'nextgame') {
+    loadNextGame();
+    // サイトのお知らせは次戦情報タブの中にあるが、次戦情報本体とは別のファイル
+    // (data/notice.json)なので、読み込み状況も別で管理する
+    if (!tabsLoaded.notice) { tabsLoaded.notice = true; loadNotice(); }
+  }
   if (tab === 'schedule') loadSchedule();
   if (tab === 'results') loadResults();
   if (tab === 'roster') loadRoster();
@@ -2318,6 +2354,73 @@ async function commitCsvImport() {
   }
 }
 
+/* ================== サイトのお知らせ(data/notice.json) ==================
+   公開サイトのNEXT GAMEカード上に重ねて表示される「NEW」通知を管理する。
+   idは保存のたびに自動生成し、公開サイト側はそのidをlocalStorageと比較して
+   まだ見ていない端末にだけNEWを表示する(サーバー等は使わない既読管理)。 */
+
+// タイムスタンプ+乱数だけの、衝突の心配がない範囲での簡易ユニークID
+function generateNoticeId() {
+  return `notice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function renderNoticeCurrentInfo(notice) {
+  const el = document.getElementById('noticeCurrentInfo');
+  if (!notice || !notice.message) {
+    el.textContent = '現在、お知らせは設定されていません。';
+    return;
+  }
+  const linkLabel = NOTICE_LINK_LABELS[notice.link] || notice.link || '(リンクなし)';
+  el.textContent = `現在のお知らせ: 「${notice.message}」(リンク先: ${linkLabel})`;
+}
+
+function updateNoticeMessageCount() {
+  const input = document.getElementById('noticeMessageInput');
+  const countEl = document.getElementById('noticeMessageCount');
+  const len = input.value.length;
+  countEl.textContent = `${len}/40文字(20文字程度までを目安に、短く分かりやすい文章にしてください)`;
+}
+document.getElementById('noticeMessageInput').addEventListener('input', updateNoticeMessageCount);
+
+async function loadNotice() {
+  try {
+    const json = await ghGet(FILES.notice);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    states.notice = { sha: json.sha, data };
+    document.getElementById('noticeMessageInput').value = data.message || '';
+    document.getElementById('noticeLinkSelect').value = data.link || '#next-game';
+    updateNoticeMessageCount();
+    renderNoticeCurrentInfo(data);
+  } catch (e) {
+    document.getElementById('noticeCurrentInfo').textContent = `お知らせの読み込みに失敗しました: ${e.message || String(e)}`;
+  }
+}
+
+async function saveNotice() {
+  const btn = document.getElementById('saveNoticeBtn');
+  const message = document.getElementById('noticeMessageInput').value.trim();
+  if (!message) {
+    showStatus('err', 'お知らせメッセージを入力してください。');
+    return;
+  }
+  const link = document.getElementById('noticeLinkSelect').value;
+  btn.disabled = true;
+  showStatus('loading', '保存中...');
+  try {
+    const newData = { id: generateNoticeId(), message, link };
+    const json = await ghPut(FILES.notice, newData, states.notice && states.notice.sha, 'サイトのお知らせを更新');
+    states.notice = { sha: json.content.sha, data: newData };
+    renderNoticeCurrentInfo(newData);
+    showStatus('ok', 'お知らせを更新しました。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('saveNoticeBtn').addEventListener('click', saveNotice);
+
 /* ================== 選手名簿 ================== */
 
 function makeRosterRow(player) {
@@ -2491,7 +2594,7 @@ document.getElementById('saveTokenBtn').addEventListener('click', () => {
 
 document.getElementById('changeTokenBtn').addEventListener('click', () => {
   clearToken();
-  tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false };
+  tabsLoaded = { nextgame: false, schedule: false, results: false, roster: false, notice: false };
   refreshTokenUI();
   clearStatus();
 });
