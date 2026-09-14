@@ -214,8 +214,8 @@ img { max-width: 100%; display: block; }
 }
 
 .hero-logo {
-  width: 210px;
-  height: 210px;
+  width: 224px;
+  height: 224px;
   border-radius: 50%;
   border: 4px solid rgba(255, 255, 255, 0.15);
   box-shadow:
@@ -1144,19 +1144,27 @@ img { max-width: 100%; display: block; }
     font-size: 0.88rem;
   }
 
-  /* スマホでの縦の余白を少し詰めて見やすくする(PC表示には影響しません) */
+  /* スマホでの縦の余白を少し詰めて見やすくする(PC表示には影響しません)。
+     PWA(ホーム画面に追加した状態)ではブラウザのアドレスバー分だけ表示領域が
+     広がり、その分MEMBER MENUまで見えやすくなるため、通常ブラウザ表示より
+     少し余白を持たせて、初期表示の見え方(MEMBER MENUの見出しが画面下端に
+     少し覗く程度)を保つようにしている */
   .hero {
-    padding: 2.4rem 1.2rem 3.5rem;
+    padding: 2.8rem 1.2rem 4.8rem;
   }
 
   /* ロゴを主役にしつつ、スマホでは画面を圧迫しないサイズに抑える */
   .hero-logo {
-    width: 168px;
-    height: 168px;
+    width: 184px;
+    height: 184px;
+  }
+
+  .hero-logo-link {
+    margin-bottom: 1.7rem;
   }
 
   .hero-next-game-wrap {
-    margin-top: 1.4rem;
+    margin-top: 2rem;
   }
 
   .hero-next-game {
@@ -1165,6 +1173,11 @@ img { max-width: 100%; display: block; }
 
   .hero-next-game-datetime {
     font-size: 1.3rem;
+  }
+
+  .member-menu {
+    margin-top: 3.4rem;
+    padding-top: 2.6rem;
   }
 
   .section {
