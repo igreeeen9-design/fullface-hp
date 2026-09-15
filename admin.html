@@ -2523,6 +2523,22 @@ async function fetchGoatCounterTotal(start, end) {
   return data.total || 0;
 }
 
+async function fetchGoatCounterDaily(dateStr) {
+  // GoatCounterのstats APIはtotal(トップレベル合計)がstart/endの境界解釈のズレの影響を受けるため、
+  // 前後1日分の余裕を持たせて取得し、stats[]内のJST基準で集計された対象日のdailyを使う。
+  const token = getGcToken();
+  const prevDay = addDaysToDateString(dateStr, -1);
+  const nextDay = addDaysToDateString(dateStr, 1);
+  const params = new URLSearchParams({ start: prevDay, end: nextDay });
+  const res = await fetch(`https://${GOATCOUNTER_SITE}.goatcounter.com/api/v0/stats/total?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GoatCounter APIエラー (HTTP ${res.status})`);
+  const data = await res.json();
+  const day = (data.stats || []).find(s => s.day === dateStr);
+  return day ? day.daily : 0;
+}
+
 async function loadAnalytics() {
   const box = document.getElementById('analyticsInfo');
   if (!box) return;
@@ -2530,12 +2546,9 @@ async function loadAnalytics() {
   box.innerHTML = '<p class="admin-note">読み込み中...</p>';
   try {
     const today = todayJstDateString();
-    // GoatCounterのstats APIは end が排他的境界(その日を含まない)のため、
-    // 「今日」を取得するには end に翌日の日付を指定する必要がある。
-    const tomorrow = addDaysToDateString(today, 1);
     const [total, todayCount] = await Promise.all([
       fetchGoatCounterTotal(GOATCOUNTER_START_DATE),
-      fetchGoatCounterTotal(today, tomorrow),
+      fetchGoatCounterDaily(today),
     ]);
     box.innerHTML = `
       <div class="analytics-cards">
