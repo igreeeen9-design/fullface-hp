@@ -309,6 +309,82 @@
       "note": "9/27、藤岡くん急きょ不参加となったため、田中桜くん参戦予定です。\nギリ９人で戦いましょう。",
       "name": "案3",
       "savedAt": "2026-09-21T04:32:40.879Z"
+    },
+    {
+      "opponent": "六本松BLACK SOX",
+      "date": "2026-09-27",
+      "startTime": "08:00",
+      "meetTime": "07:20",
+      "location": "駕与丁公園グラウンド",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "大淵",
+          "number": "25",
+          "position": "捕",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "田中桜",
+          "number": "4",
+          "position": "二",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "真鍋",
+          "number": "7",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "井口",
+          "number": "1",
+          "position": "一",
+          "comment": ""
+        },
+        {
+          "order": 5,
+          "name": "古賀",
+          "number": "16",
+          "position": "遊",
+          "comment": ""
+        },
+        {
+          "order": 6,
+          "name": "田中敬",
+          "number": "8",
+          "position": "DH",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "道下",
+          "number": "13",
+          "position": "右",
+          "comment": ""
+        },
+        {
+          "order": 8,
+          "name": "桑原",
+          "number": "19",
+          "position": "投",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "中西",
+          "number": "4",
+          "position": "左",
+          "comment": ""
+        }
+      ],
+      "bench": [],
+      "note": "",
+      "name": "案4",
+      "savedAt": "2026-09-21T12:05:58.804Z"
     }
   ],
   "defaultOrder": null,
