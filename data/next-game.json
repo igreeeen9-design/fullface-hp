@@ -169,6 +169,82 @@
       "note": "",
       "name": "スタメン案",
       "savedAt": "2026-09-15T11:32:41.677Z"
+    },
+    {
+      "opponent": "六本松BLACK SOX",
+      "date": "2026-09-27",
+      "startTime": "08:00",
+      "meetTime": "07:20",
+      "location": "駕与丁公園グラウンド",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "大淵",
+          "number": "25",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "中西",
+          "number": "4",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "田中（桜）",
+          "number": "61",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "真鍋",
+          "number": "7",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 5,
+          "name": "古賀",
+          "number": "16",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 6,
+          "name": "田中（敬）",
+          "number": "8",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "道下",
+          "number": "13",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 8,
+          "name": "桑原",
+          "number": "19",
+          "position": "",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "井口",
+          "number": "1",
+          "position": "",
+          "comment": "目の故障、、、"
+        }
+      ],
+      "bench": [],
+      "note": "9/27、藤岡くん急きょ不参加となったため、田中桜くん参戦予定です。\nギリ９人で戦いましょう。",
+      "name": "案3",
+      "savedAt": "2026-09-21T04:32:40.879Z"
     }
   ],
   "defaultOrder": null,
