@@ -5,74 +5,10 @@
     "startTime": "08:00",
     "meetTime": "07:20",
     "location": "駕与丁公園グラウンド",
-    "lineup": [
-      {
-        "order": 1,
-        "name": "大淵",
-        "number": "25",
-        "position": "捕",
-        "comment": ""
-      },
-      {
-        "order": 2,
-        "name": "田中桜",
-        "number": "4",
-        "position": "二",
-        "comment": ""
-      },
-      {
-        "order": 3,
-        "name": "真鍋",
-        "number": "7",
-        "position": "",
-        "comment": ""
-      },
-      {
-        "order": 4,
-        "name": "井口",
-        "number": "1",
-        "position": "一",
-        "comment": ""
-      },
-      {
-        "order": 5,
-        "name": "古賀",
-        "number": "16",
-        "position": "遊",
-        "comment": ""
-      },
-      {
-        "order": 6,
-        "name": "田中敬",
-        "number": "8",
-        "position": "DH",
-        "comment": ""
-      },
-      {
-        "order": 7,
-        "name": "道下",
-        "number": "13",
-        "position": "右",
-        "comment": ""
-      },
-      {
-        "order": 8,
-        "name": "桑原",
-        "number": "19",
-        "position": "投",
-        "comment": ""
-      },
-      {
-        "order": 9,
-        "name": "中西",
-        "number": "4",
-        "position": "左",
-        "comment": ""
-      }
-    ],
+    "lineup": [],
     "bench": [],
     "note": "",
-    "updatedAt": "2026-09-21T09:34:05.257Z"
+    "updatedAt": "2026-09-21T12:06:26.328Z"
   },
   "drafts": [
     {
