@@ -2488,24 +2488,112 @@ function mergeGameIntoResults(resultsData, game, groupKey) {
   resultsData.leagueTotal = recomputeTotal(resultsData.leagueTotal, resultsData.groups.filter((g) => g.era === 'current'));
 }
 
-// JSON以外の生テキスト(CSVの控え)をリポジトリに書き込むための、ghPutの薄いバリエーション
-async function ghPutRawText(path, textContent, sha, message) {
-  const content = utf8ToBase64(textContent);
-  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}`, {
-    method: 'PUT',
+// CSV専用: 全ファイルを準備し、最後のref更新だけでまとめて公開する。
+async function csvGitRequest(path, method = 'GET', body) {
+  const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/${path}`, {
+    method,
     headers: {
       Authorization: `Bearer ${getToken()}`,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message, content, sha, branch: CONFIG.branch }),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    cache: 'no-store',
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`CSVの保存に失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
+    const error = new Error(`CSV取り込みの通信に失敗しました (HTTP ${res.status}) ${(await res.text()).slice(0, 200)}`);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
+}
+
+async function readCsvSnapshot() {
+  const ref = await csvGitRequest(`git/ref/heads/${CONFIG.branch}`);
+  const head = ref.object.sha;
+  const [results, stats] = await Promise.all([FILES.results, FILES.stats].map(
+    (path) => csvGitRequest(`contents/${path}?ref=${head}`)
+  ));
+  return { head, results, stats };
+}
+
+const CSV_CONFLICT = '他の更新が入ったため保存を停止しました。CSVを読み込み直して内容を確認してください。';
+
+// 応答消失後も同じコミットを確認・再利用する。確認不能なら再加算しない。
+async function publishCsvCommit(attempt) {
+  const ref = await csvGitRequest(`git/ref/heads/${CONFIG.branch}`);
+  const head = ref.object.sha;
+  if (head === attempt.commitSha) return;
+  if (head !== attempt.baseHead) {
+    const comparison = await csvGitRequest(`compare/${attempt.commitSha}...${head}`);
+    if (comparison.status === 'ahead' || comparison.status === 'identical') return;
+    throw new Error(CSV_CONFLICT);
+  }
+  try {
+    await csvGitRequest(`git/refs/heads/${CONFIG.branch}`, 'PATCH', { sha: attempt.commitSha, force: false });
+  } catch (error) {
+    // PATCHがGitHubで成功した後、応答だけ失われた可能性がある。
+    let current;
+    let reflected = false;
+    try {
+      current = (await csvGitRequest(`git/ref/heads/${CONFIG.branch}`)).object.sha;
+      if (current === attempt.commitSha) return;
+      if (current !== attempt.baseHead) {
+        const comparison = await csvGitRequest(`compare/${attempt.commitSha}...${current}`);
+        reflected = comparison.status === 'ahead' || comparison.status === 'identical';
+      }
+    } catch (checkError) {
+      throw new Error(`保存結果を確認できません。再試行時に同じコミットの反映状況を再確認します。${checkError.message}`);
+    }
+    if (reflected) return;
+    if (current !== attempt.baseHead) throw new Error(CSV_CONFLICT);
+    throw error;
+  }
+}
+
+async function saveCsvImport(imp) {
+  if (!imp.attempt) {
+    const snapshot = await readCsvSnapshot();
+    // プレビュー後の変更も検出。従来のファイルSHAによる保護を維持する。
+    if (snapshot.results.sha !== imp.resultsSha || snapshot.stats.sha !== imp.statsSha) {
+      throw new Error(CSV_CONFLICT);
+    }
+    const resultsData = JSON.parse(base64ToUtf8(snapshot.results.content));
+    const statsData = JSON.parse(base64ToUtf8(snapshot.stats.content));
+    const game = JSON.parse(JSON.stringify(imp.game));
+    mergeGameIntoResults(resultsData, game, imp.group);
+    applyBattingStatsToPlayers(statsData.seasonRanking.players, imp.playerStats);
+    recomputeSeasonCategories(statsData.seasonRanking);
+
+    const rawPath = `data/raw-games/${game.date}.csv`;
+    let existingRaw;
+    try {
+      existingRaw = await csvGitRequest(`contents/${rawPath}?ref=${snapshot.head}`);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+    if (existingRaw) throw new Error('同じ日付の元CSVが既に存在します。上書きせず停止しました。');
+
+    const contents = [
+      { path: FILES.results, content: JSON.stringify(resultsData, null, 2) },
+      { path: FILES.stats, content: JSON.stringify(statsData, null, 2) },
+      { path: rawPath, content: imp.csvText },
+    ];
+    const base = await csvGitRequest(`git/commits/${snapshot.head}`);
+    const tree = [];
+    for (const file of contents) {
+      const blob = await csvGitRequest('git/blobs', 'POST', { content: utf8ToBase64(file.content), encoding: 'base64' });
+      tree.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha });
+    }
+    const newTree = await csvGitRequest('git/trees', 'POST', { base_tree: base.tree.sha, tree });
+    const commit = await csvGitRequest('git/commits', 'POST', {
+      message: `試合結果・個人成績・元CSVを一括保存: ${game.date} ${game.opponent}`,
+      tree: newTree.sha, parents: [snapshot.head],
+    });
+    imp.attempt = { baseHead: snapshot.head, commitSha: commit.sha };
+  }
+  await publishCsvCommit(imp.attempt);
 }
 
 let pendingCsvImport = null;
@@ -2560,7 +2648,7 @@ document.getElementById('csvParseBtn').addEventListener('click', async () => {
     const csvText = await file.text();
     const built = buildGameImportFromCsv(csvText);
 
-    const [resultsJson, statsJson] = await Promise.all([ghGet(FILES.results), ghGet(FILES.stats)]);
+    const { results: resultsJson, stats: statsJson } = await readCsvSnapshot();
     const resultsData = JSON.parse(base64ToUtf8(resultsJson.content));
     const statsData = JSON.parse(base64ToUtf8(statsJson.content));
 
@@ -2584,28 +2672,18 @@ document.getElementById('csvParseBtn').addEventListener('click', async () => {
 async function commitCsvImport() {
   const btn = document.getElementById('csvCommitBtn');
   const note = document.getElementById('csvCommitNote');
+  if (btn.disabled) return;
   btn.disabled = true;
+  document.getElementById('csvParseBtn').disabled = true;
   note.textContent = '反映中...';
   try {
     const imp = pendingCsvImport;
-    mergeGameIntoResults(imp.resultsData, imp.game, imp.group);
-    applyBattingStatsToPlayers(imp.statsData.seasonRanking.players, imp.playerStats);
-    recomputeSeasonCategories(imp.statsData.seasonRanking);
-
-    const r1 = await ghPut(FILES.results, imp.resultsData, imp.resultsSha, `試合結果を追加(CSV取り込み): ${imp.game.opponent}`);
-    states.results = { sha: r1.content.sha, data: imp.resultsData };
+    if (!imp) return;
+    await saveCsvImport(imp);
     tabsLoaded.results = false;
 
-    const r2 = await ghPut(FILES.stats, imp.statsData, imp.statsSha, `個人成績を更新(CSV取り込み): ${imp.game.opponent}`);
-
-    try {
-      await ghPutRawText(`data/raw-games/${imp.game.date}.csv`, imp.csvText, undefined, `生スコアCSVを保存: ${imp.game.date}`);
-    } catch (e) {
-      // CSVの控え保存に失敗しても、本体(results.json/stats.json)の更新は既に成功しているので処理は続行する
-    }
-
     note.textContent = '';
-    document.getElementById('csvPreviewArea').innerHTML = '<p class="admin-note">✅ 試合結果と個人成績を更新しました。1分ほどでサイトに反映されます。</p>';
+    document.getElementById('csvPreviewArea').innerHTML = '<p class="admin-note">✅ 試合結果・個人成績・元CSVをまとめて保存しました。1分ほどでサイトに反映されます。</p>';
     document.getElementById('csvFileInput').value = '';
     pendingCsvImport = null;
     await loadResults();
@@ -2614,6 +2692,7 @@ async function commitCsvImport() {
     note.innerHTML = `<span style="color:var(--red);">${escapeAttr(e.message || String(e))}</span>`;
   } finally {
     btn.disabled = false;
+    document.getElementById('csvParseBtn').disabled = false;
   }
 }
 

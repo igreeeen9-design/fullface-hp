@@ -41,6 +41,7 @@ function setup() {
     files.set(name, clone(data));
     return { content: { sha: name + ':saved' } };
   };
+  require('./helpers/csv-github.cjs')(context, files, writes);
   return { context, run, functions, files, writes, element };
 }
 
@@ -276,10 +277,9 @@ test('CSVの実際の保存処理から通常保存・再編集へ移っても�
   env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {}; applyCurrentGroupEditsToStatePrevious = () => {};');
   const csvText = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
   const imp = env.functions.buildGameImportFromCsv(csvText);
-  Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'results:sha', statsData: readJson('stats.json'), statsSha: 'stats:sha' });
+  Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
   env.context.importForTest = imp;
   env.run('pendingCsvImport = importForTest;');
-  env.context.ghPutRawText = async () => {};
   await env.run('commitCsvImport()');
   assert.equal(env.files.get('data/results.json').groups[0].games.length, 9);
   const importedStats = clone(env.files.get('data/stats.json'));
@@ -326,10 +326,9 @@ for (const importFirst of [false, true]) {
     if (importFirst) {
       const csvText = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
       const imp = env.functions.buildGameImportFromCsv(csvText);
-      Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'results:sha', statsData: readJson('stats.json'), statsSha: 'stats:sha' });
+      Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
       env.context.importForTest = imp;
       env.run('pendingCsvImport = importForTest;');
-      env.context.ghPutRawText = async () => {};
       await env.run('commitCsvImport()');
     } else {
       await env.functions.loadResults();
