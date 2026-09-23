@@ -865,7 +865,9 @@ async function ghGet(path) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`読み込みに失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
+    const error = new Error(`読み込みに失敗しました (HTTP ${res.status}) ${body.slice(0, 200)}`);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -1500,7 +1502,7 @@ function makeResultRow(game, era) {
    これは既存試合(game.detail)には一切手を加えず、新しいフィールド game.boxscore
    として追加で保存する形にすることで、過去データと衝突しないようにするための設計。 */
 
-const BOXSCORE_HEADERS = ['打順', '選手名', '守備', '打席', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '打点', '得点', '三振', '四球', '死球', '犠打', '犠飛'];
+const BOXSCORE_HEADERS = ['打順', '選手名', '守備', '打席', '打数', '安打', '単打', '二塁打', '三塁打', '本塁打', '打点', '得点', '三振', '四球', '死球', '犠打', '犠飛', '盗塁'];
 
 const AT_BAT_OUTCOMES = [
   { value: '1B', label: '単打' },
@@ -1610,6 +1612,8 @@ function addAtBatRow(atbatsEl, code) {
 function addPlayerCard(playersEl, player) {
   const card = document.createElement('div');
   card.className = 'boxscore-player';
+  // 打席編集では変更しない盗塁数を保持する。
+  card._sb = Number(player.sb || 0);
   card.innerHTML = `
     <div class="boxscore-player-header">
       <input type="text" class="bx-name" list="rosterPlayersDatalist" placeholder="選手名" value="${escapeAttr(player.name || '')}">
@@ -1635,7 +1639,8 @@ function addPlayerCard(playersEl, player) {
 
 function initBoxscorePanel(row, game) {
   const panel = row.querySelector('.boxscore-panel');
-  const hasExisting = game.boxscore && Array.isArray(game.boxscore.headers) && Array.isArray(game.boxscore.rows) && game.boxscore.rows.length;
+  const boxscore = resultBoxscores.get(game) || game.boxscore;
+  const hasExisting = boxscore && Array.isArray(boxscore.headers) && Array.isArray(boxscore.rows) && boxscore.rows.length;
   panel.innerHTML = `
     <p class="admin-note">
       出場した選手を追加し、打席ごとに結果を選んでください。打席・打数・安打などは自動計算されます。
@@ -1649,14 +1654,15 @@ function initBoxscorePanel(row, game) {
 
   if (hasExisting) {
     const idx = {};
-    game.boxscore.headers.forEach((h, i) => { idx[h] = i; });
-    game.boxscore.rows.forEach((r) => {
+    boxscore.headers.forEach((h, i) => { idx[h] = i; });
+    boxscore.rows.forEach((r) => {
       addPlayerCard(playersEl, {
         name: r[idx['選手名']] || '',
         position: r[idx['守備']] || '',
-        atBats: reconstructAtBatsFromRow(game.boxscore.headers, r),
+        atBats: reconstructAtBatsFromRow(boxscore.headers, r),
         rbi: idx['打点'] != null ? r[idx['打点']] : 0,
         runs: idx['得点'] != null ? r[idx['得点']] : 0,
+        sb: idx['盗塁'] != null ? r[idx['盗塁']] : 0,
       });
     });
   } else {
@@ -1695,8 +1701,9 @@ function initBoxscorePanel(row, game) {
 function collectBoxscoreFromRow(row) {
   const panel = row.querySelector('.boxscore-panel');
   if (!panel || row.dataset.bxInit !== '1') {
-    // パネルを一度も開いていない(触っていない)場合は、既存のboxscoreをそのまま保持する
-    return (row._originalGame && row._originalGame.boxscore) || null;
+    // 既存boxscoreは保持する。旧形式の盗塁列を元CSVから補完した場合も失わない。
+    const original = row._originalGame;
+    return original && original.boxscore ? (resultBoxscores.get(original) || original.boxscore) : null;
   }
   const cards = Array.from(panel.querySelectorAll('.boxscore-player'));
   const rows = [];
@@ -1713,10 +1720,9 @@ function collectBoxscoreFromRow(row) {
       String(stats.PA), String(stats.AB), String(stats.H),
       String(stats.B1), String(stats.B2), String(stats.B3), String(stats.HR),
       String(rbi), String(runs), String(stats.SO), String(stats.BB), String(stats.HBP),
-      String(stats.SH), String(stats.SF),
+      String(stats.SH), String(stats.SF), String(card._sb || 0),
     ]);
   });
-  if (!rows.length) return null;
   return { headers: BOXSCORE_HEADERS, rows };
 }
 
@@ -1769,8 +1775,10 @@ function collectCurrentGroupGames() {
     };
     // boxscoreは2026年度以降の試合にのみ存在しうるフィールド。過去データ(2023〜2025年度)の
     // 試合オブジェクトに不要な `boxscore: null` を追加してしまわないよう、値がある場合だけ設定する。
-    const boxscore = collectBoxscoreFromRow(row);
+    const source = resultBoxscores.get(original) || original.boxscore || null;
+    const boxscore = collectBoxscoreFromRow(row) || (date !== original.date ? source : null);
     if (boxscore) game.boxscore = boxscore;
+    resultBoxscores.set(game, boxscore || source);
     return game;
   }).filter((g) => g.opponent);
 }
@@ -1829,13 +1837,110 @@ document.getElementById('confirmNewGroupBtn').addEventListener('click', () => {
   renderResultsGameList();
 });
 
+// 元CSVの成績は編集用にだけ補完し、未編集の試合にはboxscoreを追加保存しない。
+const resultBoxscores = new WeakMap();
+
+// 過去の元CSVで使われたフルネーム・交代記号を既存の通算成績の表記に合わせる。
+function normalizeResultPlayerName(name) {
+  const normalized = normalizePlayerName(String(name || '').trim().replace(/^→/, '').replace(/\(/g, '（').replace(/\)/g, '）'));
+  const aliases = { '田中敬治': '田中（敬）', '田中桜奨': '田中（桜）', '工藤由陽': '工藤（由）', '工藤亮': '工藤' };
+  return aliases[normalized] || normalized;
+}
+
+async function prepareResultBoxscores(data) {
+  const games = (data.groups || []).filter((g) => g.era === 'current').flatMap((g) => g.games);
+  await Promise.all(games.map(async (game) => {
+    let boxscore = game.boxscore || null;
+    if ((!boxscore || !boxscore.headers.includes('盗塁')) && /^\d{4}-\d{2}-\d{2}$/.test(game.date || '')) {
+      let csv = null;
+      try {
+        const json = await ghGet(`data/raw-games/${game.date}.csv`);
+        csv = base64ToUtf8(json.content);
+      } catch (e) {
+        // 手入力した試合には元CSVがない。通信・認証エラーは欠落とみなさない。
+        if (e.status !== 404) throw e;
+      }
+      if (csv !== null) {
+        const imported = buildGameImportFromCsv(csv, game.date);
+        if (!boxscore) {
+          boxscore = imported.game.boxscore;
+        } else {
+          const nameIndex = boxscore.headers.indexOf('選手名');
+          const steals = new Map(imported.playerStats.map((p) => [p.name, p.sb]));
+          boxscore = {
+            headers: [...boxscore.headers, '盗塁'],
+            rows: boxscore.rows.map((r) => [...r, String(steals.get(normalizeResultPlayerName(r[nameIndex])) || 0)]),
+          };
+        }
+      }
+    }
+    resultBoxscores.set(game, boxscore);
+  }));
+}
+
+// 保存前後の集計値の差だけを使う。既存の通算値・計算方法を一括で置き換えない。
+function totalResultBatting(data) {
+  const totals = new Map();
+  const columns = { pa: '打席', ab: '打数', h: '安打', b2: '二塁打', b3: '三塁打', hr: '本塁打', rbi: '打点', sb: '盗塁' };
+  (data.groups || []).filter((g) => g.era === 'current').forEach((group) => {
+    group.games.forEach((game) => {
+      const boxscore = resultBoxscores.get(game) || game.boxscore;
+      if (!boxscore) return;
+      const names = new Set();
+      boxscore.rows.forEach((row) => {
+        const name = normalizeResultPlayerName(row[boxscore.headers.indexOf('選手名')]);
+        if (!name) return;
+        if (!totals.has(name)) totals.set(name, { gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0 });
+        const rec = totals.get(name);
+        if (!names.has(name)) rec.gp++;
+        names.add(name);
+        Object.entries(columns).forEach(([key, label]) => {
+          const raw = row[boxscore.headers.indexOf(label)];
+          const value = raw == null || raw === '' || raw === '-' ? 0 : Number(raw);
+          if (!Number.isInteger(value) || value < 0) throw new Error(`${name}の${label}が不正です。`);
+          rec[key] += value;
+        });
+      });
+    });
+  });
+  return totals;
+}
+
+function applyResultBattingDelta(statsData, before, after) {
+  const players = statsData.seasonRanking.players;
+  let changed = false;
+  for (const name of new Set([...before.keys(), ...after.keys()])) {
+    const previous = before.get(name) || {};
+    const next = after.get(name) || {};
+    const keys = ['gp', 'pa', 'ab', 'h', 'b2', 'b3', 'hr', 'rbi', 'sb'];
+    const delta = Object.fromEntries(keys.map((key) => [key, (next[key] || 0) - (previous[key] || 0)]));
+    if (keys.every((key) => delta[key] === 0)) continue;
+    let rec = players.find((p) => normalizeResultPlayerName(p.name) === name);
+    if (!rec) {
+      rec = { name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
+      players.push(rec);
+    }
+    keys.forEach((key) => {
+      const value = (rec[key] || 0) + delta[key];
+      if (!Number.isInteger(value) || value < 0) throw new Error(`${name}の通算成績と試合記録が一致しません(${key})。保存を中止しました。`);
+      rec[key] = value;
+    });
+    // 打点・盗塁だけの訂正で既存の率を変えない。率の式はCSV取り込みと共通。
+    if (['pa', 'ab', 'h', 'b2', 'b3', 'hr'].some((key) => delta[key] !== 0)) updateBattingRates(rec);
+    changed = true;
+  }
+  if (changed) recomputeSeasonCategories(statsData.seasonRanking);
+  return changed;
+}
+
 async function loadResults() {
   showStatus('loading', '読み込み中...');
   try {
     const json = await ghGet(FILES.results);
     const data = JSON.parse(base64ToUtf8(json.content));
     if (!Array.isArray(data.groups)) data.groups = [];
-    states.results = { sha: json.sha, data };
+    await prepareResultBoxscores(data);
+    states.results = { sha: json.sha, data, battingBaseline: totalResultBatting(data) };
     lastGroupIndex = 0;
     renderResultsGroupSelect();
     renderResultsGameList();
@@ -1851,13 +1956,25 @@ async function saveResults() {
   btn.disabled = true;
   showStatus('loading', '保存中...');
   try {
+    if (!states.results || !states.results.battingBaseline) {
+      throw new Error('試合結果を再読み込みしてから保存してください。');
+    }
     applyCurrentGroupEditsToStatePrevious();
     const data = states.results.data;
     data.leagueTotal = recomputeTotal(data.leagueTotal, data.groups.filter((g) => g.era === 'current'));
     data.historyTotal = recomputeTotal(data.historyTotal, data.groups.filter((g) => g.era === 'history'));
+    const battingAfter = totalResultBatting(data);
+    const statsJson = await ghGet(FILES.stats);
+    const statsData = JSON.parse(base64ToUtf8(statsJson.content));
+    const statsChanged = applyResultBattingDelta(statsData, states.results.battingBaseline, battingAfter);
     const json = await ghPut(FILES.results, data, states.results.sha, '試合結果を更新');
-    states.results = { sha: json.content.sha, data };
-    showStatus('ok', '保存しました。1分ほどでサイトに反映されます。');
+    // 個人成績の保存に失敗した場合も、再試行で同じ差分を反映できるよう基準値はまだ進めない。
+    states.results.sha = json.content.sha;
+    if (statsChanged) {
+      await ghPut(FILES.stats, statsData, statsJson.sha, '試合結果の修正を通算成績に反映');
+    }
+    states.results.battingBaseline = battingAfter;
+    showStatus('ok', '試合結果と通算成績を保存しました。1分ほどでサイトに反映されます。');
   } catch (e) {
     showStatus('err', e.message || String(e));
   } finally {
@@ -1952,7 +2069,7 @@ function findCsvRowIndex(rows, predicate, fromIndex) {
 
 // スコア記録表のCSVを構造化する。列の位置は決め打ちにせず、「VS」「チーム名」「計」
 // 「打順」といった見出しセルを目印に探すことで、列がひとつずれても壊れにくくしている。
-function parseGameCsv(rows) {
+function parseGameCsv(rows, recordedDate) {
   const headerIdx = findCsvRowIndex(rows, (r) => (r[0] || '').trim() === 'VS');
   if (headerIdx === -1) throw new Error('「VS」から始まる見出し行が見つかりません。テンプレート通りの形式か確認してください。');
   const headerRow = rows[headerIdx];
@@ -1967,13 +2084,14 @@ function parseGameCsv(rows) {
     else if (cell.includes('リーグ戦') || cell.includes('交流戦')) group = cell.includes('交流戦') ? 'interleague' : 'league';
     else if (!venue) venue = cell;
   });
+  if (recordedDate) date = recordedDate; // 保存済みCSVはファイルに対応する日付を使う。
   if (!date) throw new Error('試合日(例: 9/13)が見出し行から見つかりません。');
   if (!group) group = 'league'; // 区分の指定が無ければリーグ戦として扱う
 
-  const inningHeaderIdx = findCsvRowIndex(rows, (r) => r.some((c) => (c || '').trim() === '計'), headerIdx + 1);
+  const inningHeaderIdx = findCsvRowIndex(rows, (r) => r.some((c) => /^(計|合計)$/.test((c || '').trim())), headerIdx + 1);
   if (inningHeaderIdx === -1) throw new Error('イニング見出し行(「計」を含む行)が見つかりません。');
   const inningHeaderRow = rows[inningHeaderIdx];
-  const totalColIdx = inningHeaderRow.findIndex((c) => (c || '').trim() === '計');
+  const totalColIdx = inningHeaderRow.findIndex((c) => /^(計|合計)$/.test((c || '').trim()));
   const teamNameColIdx = inningHeaderRow.findIndex((c) => (c || '').trim() === 'チーム名');
   if (teamNameColIdx === -1) throw new Error('「チーム名」列が見つかりません。');
   const inningCols = [];
@@ -2050,9 +2168,10 @@ function formatDateLabelForResult(isoDate) {
 
 // 選手ごとに全打席のセルをまとめ、既存のcomputeStatsFromAtBats(⚾個人成績を入力パネルと同じ関数)
 // で1試合分の成績を計算する。打順が同じでも選手名が違えば別選手として扱う(交代選手対応)。
-function buildGameImportFromCsv(csvText) {
+function buildGameImportFromCsv(csvText, recordedDate) {
   const rows = parseCsvText(csvText);
-  const parsed = parseGameCsv(rows);
+  const parsed = parseGameCsv(rows, recordedDate);
+  if (recordedDate) parsed.players.forEach((p) => { p.name = normalizeResultPlayerName(p.name); });
 
   const nameMap = new Map();
   parsed.players.forEach((p) => {
@@ -2106,7 +2225,7 @@ function buildGameImportFromCsv(csvText) {
         String(p.stats.B1), String(p.stats.B2), String(p.stats.B3), String(p.stats.HR),
         String(p.rbi), '0',
         String(p.stats.SO), String(p.stats.BB), String(p.stats.HBP),
-        String(p.stats.SH), String(p.stats.SF),
+        String(p.stats.SH), String(p.stats.SF), String(p.sb || 0),
       ]),
     },
   };
@@ -2145,15 +2264,19 @@ function applyBattingStatsToPlayers(players, playerStats) {
     rec.hr += p.stats.HR;
     rec.rbi = (rec.rbi || 0) + p.rbi;
     rec.sb = (rec.sb || 0) + p.sb;
-    const avg = rec.ab ? rec.h / rec.ab : 0;
-    const obp = rec.pa ? (rec.h + (rec.pa - rec.ab)) / rec.pa : 0;
-    const tb = rec.h + rec.b2 + 2 * rec.b3 + 3 * rec.hr;
-    const slg = rec.ab ? tb / rec.ab : 0;
-    rec.avg = fmtRateStat(avg);
-    rec.obp = fmtRateStat(obp);
-    rec.slg = fmtRateStat(slg);
-    rec.ops = fmtRateStat(obp + slg);
+    updateBattingRates(rec);
   });
+}
+
+function updateBattingRates(rec) {
+  const avg = rec.ab ? rec.h / rec.ab : 0;
+  const obp = rec.pa ? (rec.h + (rec.pa - rec.ab)) / rec.pa : 0;
+  const tb = rec.h + rec.b2 + 2 * rec.b3 + 3 * rec.hr;
+  const slg = rec.ab ? tb / rec.ab : 0;
+  rec.avg = fmtRateStat(avg);
+  rec.obp = fmtRateStat(obp);
+  rec.slg = fmtRateStat(slg);
+  rec.ops = fmtRateStat(obp + slg);
 }
 
 // 同じ数値のプレイヤーは「・」でつないで1行にまとめる(既存データの表記に合わせた仕様)。
@@ -2342,10 +2465,7 @@ async function commitCsvImport() {
     document.getElementById('csvPreviewArea').innerHTML = '<p class="admin-note">✅ 試合結果と個人成績を更新しました。1分ほどでサイトに反映されます。</p>';
     document.getElementById('csvFileInput').value = '';
     pendingCsvImport = null;
-    lastGroupIndex = 0;
-    renderResultsGroupSelect();
-    document.getElementById('resultsGroupSelect').value = '0';
-    renderResultsGameList();
+    await loadResults();
   } catch (e) {
     note.textContent = '';
     note.innerHTML = `<span style="color:var(--red);">${escapeAttr(e.message || String(e))}</span>`;
