@@ -689,7 +689,7 @@ function renderRoster(container, playersData, statsData) {
       </div>` : '<p class="placeholder-note">選手名簿は準備中です。</p>';
 }
 
-function renderPlayers(container, statsData, statsFailed) {
+function renderPlayers(container, statsData, statsFailed, resultsData) {
   const ranking = statsData && statsData.seasonRanking;
   let rankingHtml = '';
   if (ranking && Array.isArray(ranking.categories) && ranking.categories.length) {
@@ -703,9 +703,14 @@ function renderPlayers(container, statsData, statsFailed) {
 
   let playerStatsHtml = '';
   if (ranking && Array.isArray(ranking.players) && ranking.players.length) {
+    const gameCount = resultsData && Array.isArray(resultsData.groups)
+      ? resultsData.groups.filter((g) => g.era === 'current')
+        .reduce((total, g) => total + (Array.isArray(g.games) ? g.games.length : 0), 0)
+      : null;
+    const gameCountNote = gameCount === null ? '' : `、全${gameCount}試合`;
     playerStatsHtml = `
       <h3 class="table-title">2026年 個人打撃成績</h3>
-      <p class="placeholder-note">※ 2026年シーズン、全9試合の記録より。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
+      <p class="placeholder-note">※ 2026年シーズン${gameCountNote}の記録より。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
       ${renderPlayerStatsTable(ranking.players)}`;
   }
 
@@ -760,7 +765,7 @@ async function loadSiteData() {
   }
 
   if (playersEl) {
-    renderPlayers(playersEl, statsData, statsFailed);
+    renderPlayers(playersEl, statsData, statsFailed, resultsData);
   }
 
   if (rosterEl) {
