@@ -136,6 +136,16 @@ function formatUpdatedAt(iso) {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function renderAttendance(attendance) {
+  if (!attendance || !Array.isArray(attendance.members)) return '';
+  const members = attendance.members;
+  return `<div class="next-game-attendance">
+    <h3>参加予定：${members.length}人</h3>
+    ${members.length ? `<ul class="bench-list">${members.map((p) =>
+      `<li>${escapeHtml(p.name)}${p.number ? `［${escapeHtml(p.number)}］` : ''}</li>`).join('')}</ul>` : ''}
+  </div>`;
+}
+
 function renderNextGame(container, data) {
   const g = data && data.current;
   if (!g || !g.opponent) {
@@ -170,6 +180,7 @@ function renderNextGame(container, data) {
       <div class="fact"><dt>試合会場</dt><dd>${g.location ? venueLink(g.location) : '未定'}</dd></div>
       <div class="fact"><dt>集合時間</dt><dd>${escapeHtml(g.meetTime) || '未定'}</dd></div>
     </dl>
+    ${renderAttendance(g.attendance)}
     <div class="next-game-lineup">
       <h3>スタメン（予定）</h3>
       <div class="table-wrap">

@@ -960,6 +960,7 @@ img { max-width: 100%; display: block; }
   }
 }
 
+.next-game-attendance h3,
 .next-game-lineup h3,
 .next-game-bench h3,
 .next-game-note h3 {

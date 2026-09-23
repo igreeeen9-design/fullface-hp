@@ -511,6 +511,12 @@
     border-radius: 7px;
     padding: 0.5rem 0.7rem;
   }
+/* 参加確定メンバー */
+.attendance-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; }
+.attendance-option { display: flex; align-items: center; gap: 0.65rem; padding: 0.7rem; border: 1px solid #dde3e6; border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; }
+.attendance-option input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin: 0; }
+.attendance-guest { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: end; margin-top: 1rem; }
+.attendance-guest > div { flex: 1 1 130px; min-width: 0; }
 </style>
 </head>
 <body>
@@ -624,6 +630,22 @@
         <label for="locationInput">試合会場</label>
         <input type="text" id="locationInput" placeholder="例: 北谷運動公園">
       </div>
+    </section>
+
+    <section class="admin-card">
+      <h2>参加確定メンバー</h2>
+      <p class="admin-note" id="attendanceTarget">次戦情報を読み込むと選択できます。</p>
+      <p class="admin-note">チェックしたメンバーだけを公開します。チェックなしは欠席ではなく、公開対象外です。スタメンや編集中の下書きとは別に保存します。</p>
+      <p id="attendancePublished" class="admin-note"></p>
+      <p id="attendanceCount" aria-live="polite">選択中：0人</p>
+      <div id="attendanceOptions" class="attendance-options"></div>
+      <div class="attendance-guest">
+        <div class="field"><label for="attendanceGuestName">助っ人などの名前</label><input type="text" id="attendanceGuestName" placeholder="名前"></div>
+        <div class="field"><label for="attendanceGuestNumber">背番号（任意）</label><input type="text" id="attendanceGuestNumber" placeholder="背番号"></div>
+        <button type="button" class="admin-btn admin-btn-secondary" id="addAttendanceGuestBtn" disabled>参加者を追加</button>
+      </div>
+      <p id="attendanceEditorStatus" class="admin-note" role="status"></p>
+      <button type="button" class="admin-btn admin-btn-primary" id="saveAttendanceBtn" disabled>参加予定を公開・更新</button>
     </section>
 
     <section class="admin-card">
@@ -1000,6 +1022,123 @@ function renderBench(bench) {
   (bench || []).forEach((item) => container.appendChild(makeBenchRow(item)));
 }
 
+// 参加予定の編集状態はスタメンのフォーム・下書きと独立して保持する。
+let attendanceRoster = [];
+let attendanceOptions = [];
+let attendanceReady = false;
+
+function attendanceMemberKey(member) {
+  return JSON.stringify([member.name, member.number]);
+}
+
+function buildAttendanceOptions(roster, attendance) {
+  const options = new Map();
+  const add = (member, selected) => {
+    const item = { name: String(member.name || '').trim(), number: String(member.number || '').trim(), selected };
+    if (!item.name) return;
+    const key = attendanceMemberKey(item);
+    if (!options.has(key)) options.set(key, item);
+    else if (selected) options.get(key).selected = true;
+  };
+  roster.forEach((member) => add(member, false));
+  // 名簿から削除・改名された人や助っ人も、保存済みなら消さない。
+  ((attendance && attendance.members) || []).forEach((member) => add(member, true));
+  return [...options.values()];
+}
+
+function collectAttendanceMembers() {
+  return attendanceOptions.filter((p) => p.selected).map((p) => ({ name: p.name, number: p.number }));
+}
+
+function updateAttendanceSummary() {
+  const current = states.nextGame && states.nextGame.data.current;
+  document.getElementById('attendanceTarget').textContent = current && current.opponent
+    ? `公開対象：${formatDateOnly(current.date) || '日付未定'} ${current.opponent}`
+    : '先に次戦の基本情報を公開してください。';
+  document.getElementById('attendancePublished').textContent = current && current.attendance
+    ? `公開中の参加予定：${current.attendance.members.length}人`
+    : '参加予定は未設定です。';
+  document.getElementById('attendanceCount').textContent = `選択中：${collectAttendanceMembers().length}人`;
+  document.getElementById('saveAttendanceBtn').disabled = !attendanceReady || !current || !current.opponent;
+  document.getElementById('addAttendanceGuestBtn').disabled = !attendanceReady;
+}
+
+function renderAttendanceOptions() {
+  document.getElementById('attendanceOptions').innerHTML = attendanceOptions.map((p, i) => `
+    <label class="attendance-option"><input type="checkbox" data-attendance-index="${i}" ${p.selected ? 'checked' : ''}>
+      <span>${escapeAttr(p.name)}${p.number ? `［${escapeAttr(p.number)}］` : ''}</span></label>`).join('');
+  updateAttendanceSummary();
+}
+
+function resetAttendanceEditor() {
+  attendanceOptions = buildAttendanceOptions(attendanceRoster, states.nextGame.data.current.attendance);
+  document.getElementById('attendanceGuestName').value = '';
+  document.getElementById('attendanceGuestNumber').value = '';
+  document.getElementById('attendanceEditorStatus').textContent = '';
+  renderAttendanceOptions();
+}
+
+async function loadAttendanceEditor() {
+  attendanceReady = false;
+  updateAttendanceSummary();
+  try {
+    const json = await ghGet(FILES.roster);
+    const data = JSON.parse(base64ToUtf8(json.content));
+    if (!Array.isArray(data.roster)) throw new Error('選手名簿の形式を確認してください。');
+    attendanceRoster = data.roster;
+    attendanceReady = true;
+    resetAttendanceEditor();
+  } catch (e) {
+    document.getElementById('attendanceEditorStatus').textContent = `選手名簿を読み込めませんでした。ページを再読み込みしてください。${e.message || ''}`;
+  }
+}
+
+document.getElementById('attendanceOptions').addEventListener('change', (e) => {
+  const index = e.target.dataset.attendanceIndex;
+  if (index === undefined || !attendanceOptions[index]) return;
+  attendanceOptions[index].selected = e.target.checked;
+  document.getElementById('attendanceCount').textContent = `選択中：${collectAttendanceMembers().length}人`;
+});
+
+document.getElementById('addAttendanceGuestBtn').addEventListener('click', () => {
+  if (!attendanceReady) return;
+  const name = document.getElementById('attendanceGuestName').value.trim();
+  const number = document.getElementById('attendanceGuestNumber').value.trim();
+  if (!name) {
+    document.getElementById('attendanceEditorStatus').textContent = '追加する参加者の名前を入力してください。';
+    return;
+  }
+  const existing = attendanceOptions.find((p) => attendanceMemberKey(p) === attendanceMemberKey({ name, number }));
+  if (existing) existing.selected = true;
+  else attendanceOptions.push({ name, number, selected: true });
+  document.getElementById('attendanceGuestName').value = '';
+  document.getElementById('attendanceGuestNumber').value = '';
+  document.getElementById('attendanceEditorStatus').textContent = '';
+  renderAttendanceOptions();
+});
+
+async function saveAttendance() {
+  if (!attendanceReady || !states.nextGame || !states.nextGame.data.current.opponent) return;
+  const btn = document.getElementById('saveAttendanceBtn');
+  btn.disabled = true;
+  showStatus('loading', '参加予定を公開中...');
+  try {
+    const state = states.nextGame;
+    const attendance = { members: collectAttendanceMembers(), updatedAt: new Date().toISOString() };
+    const newData = { ...state.data, current: { ...state.data.current, attendance } };
+    const json = await ghPut(FILES.nextGame, newData, state.sha, '参加予定メンバーを公開');
+    states.nextGame = { sha: json.content.sha, data: newData };
+    renderNextGameStatus();
+    showStatus('ok', '参加予定を公開しました。スタメンや下書きは変更していません。1分ほどでサイトに反映されます。');
+  } catch (e) {
+    showStatus('err', e.message || String(e));
+  } finally {
+    updateAttendanceSummary();
+  }
+}
+
+document.getElementById('saveAttendanceBtn').addEventListener('click', saveAttendance);
+
 function fillNextGameForm(current) {
   document.getElementById('opponentInput').value = current.opponent || '';
   document.getElementById('dateInput').value = current.date || '';
@@ -1119,6 +1258,7 @@ async function loadNextGame() {
     if (data.defaultOrder === undefined) data.defaultOrder = null;
     states.nextGame = { sha: json.sha, data };
     fillNextGameForm(data.current);
+    await loadAttendanceEditor();
     renderNextGameStatus();
     renderDefaultOrderInfo();
     renderDraftList();
@@ -1230,10 +1370,12 @@ async function saveCurrent() {
     const current = collectNextGameForm();
     current.updatedAt = new Date().toISOString();
     const data = states.nextGame.data;
+    if (data.current && data.current.attendance) current.attendance = data.current.attendance;
     const newData = { current, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を公開');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderNextGameStatus();
+    updateAttendanceSummary();
     showStatus('ok', '公開しました。1分ほどでサイトに反映されます。');
   } catch (e) {
     showStatus('err', e.message || String(e));
@@ -1285,6 +1427,7 @@ async function archiveAndClear() {
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
     states.nextGame = { sha: json.content.sha, data: newData };
     fillNextGameForm(blankCurrent);
+    resetAttendanceEditor();
     renderNextGameStatus();
     showStatus('ok', nextGame
       ? `履歴に保存し、次の試合(${nextGame.opponent})を自動セットしました。集合時間だけ入力して公開してください。`
