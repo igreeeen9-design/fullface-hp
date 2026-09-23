@@ -1318,3 +1318,28 @@ img { max-width: 100%; display: block; }
     padding: 0.45rem 0;
   }
 }
+
+/* 試合ごとの参加予定。表と地図リンクを維持し、対戦相手を開閉ボタンにする。 */
+.schedule-attendance-toggle {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem;
+  width: 100%; min-height: 44px; padding: .35rem 0;
+  border: 0; background: transparent; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.schedule-attendance-toggle:focus-visible { outline: 2px solid var(--navy, #14233f); outline-offset: 3px; }
+.attendance-badge { display: inline-block; padding: .15rem .45rem; border-radius: 4px; background: #eaf0f6; color: #14233f; font-size: .75rem; white-space: nowrap; }
+.schedule-chevron { transition: transform .15s; }
+.schedule-attendance-toggle[aria-expanded="true"] .schedule-chevron { transform: rotate(180deg); }
+.schedule-attendance-detail[hidden] { display: none; }
+.schedule-attendance-detail > td { background: #f4f7fa; white-space: normal; }
+.schedule-attendance-detail .next-game-attendance { padding: .5rem; }
+.schedule-attendance-detail .bench-list { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .schedule-table { table-layout: fixed; }
+  .schedule-table th:nth-child(1) { width: 22%; }
+  .schedule-table th:nth-child(2) { width: 38%; }
+  .schedule-table th:nth-child(3) { width: 24%; }
+  .schedule-table th:nth-child(4) { width: 16%; }
+  .schedule-attendance-toggle > span:first-child { overflow-wrap: anywhere; }
+  .schedule-table .attendance-badge { font-size: .7rem; padding-inline: .3rem; }
+}

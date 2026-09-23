@@ -223,13 +223,18 @@ function renderHeroNextGame(data) {
   `;
 }
 
+// 次戦と試合日程で同じ取得結果を参照し、参加予定の表示を一致させる。
+const scheduleDataRequest = loadJson('data/schedule.json').catch(() => null);
+const nextGameDataRequest = loadJson('data/next-game.json').catch(() => null);
+
 async function loadNextGame() {
   const container = document.getElementById('nextGameContent');
   try {
-    const res = await fetch('data/next-game.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error('failed to load next-game.json');
-    const data = await res.json();
-    if (container) renderNextGame(container, data);
+    const [data, schedule] = await Promise.all([nextGameDataRequest, scheduleDataRequest]);
+    if (!data) throw new Error('failed to load next-game.json');
+    const current = data.current || {};
+    const attendance = nextGameAttendance(schedule ? schedule.games || [] : [], current);
+    if (container) renderNextGame(container, { ...data, current: { ...current, attendance } });
     renderHeroNextGame(data);
   } catch (e) {
     if (container) container.innerHTML = '<p class="placeholder-note">次戦情報の読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
@@ -250,28 +255,46 @@ async function loadJson(url) {
   return res.json();
 }
 
-function renderSchedule(container, data) {
+function renderSchedule(container, data, current = null) {
   const games = (data && Array.isArray(data.games)) ? data.games : [];
   if (!games.length) {
     container.innerHTML = '<p class="placeholder-note">試合日程は準備中です。</p>';
     return;
   }
-  const rows = games.map((g) => `
-        <tr>
+  const rows = games.map((g, index) => {
+    const confirmed = Boolean(g.date && g.opponent);
+    const attendance = scheduleGameAttendance(g, games, current);
+    const label = attendance ? `参加予定 ${attendance.members.length}人` : '参加予定 未設定';
+    const opponent = confirmed
+      ? `<button type="button" class="schedule-attendance-toggle" data-schedule-toggle="${index}" aria-expanded="false" aria-controls="schedule-attendance-${index}">
+          <span>${escapeHtml(g.opponent)}</span><span class="attendance-badge">${label}</span><span class="schedule-chevron" aria-hidden="true">▾</span>
+        </button>` : escapeHtml(g.opponent);
+    return `<tr>
           <td>${formatDateOnly(g.date) ? formatDateCell(formatDateOnly(g.date)) : '未定'}</td>
-          <td>${escapeHtml(g.opponent)}</td>
+          <td>${opponent}</td>
           <td>${g.location ? venueLink(g.location) : '未定'}</td>
           <td>${escapeHtml(g.time || '未定')}</td>
-        </tr>`).join('');
+        </tr>${confirmed ? `<tr id="schedule-attendance-${index}" class="schedule-attendance-detail" hidden><td colspan="4">
+          <div role="region" aria-label="${escapeHtml(g.opponent)}の参加予定メンバー">
+            ${attendance ? renderAttendance(attendance) : '<p class="placeholder-note">参加予定はまだ登録されていません。</p>'}
+          </div></td></tr>` : ''}`;
+  }).join('');
   container.innerHTML = `
     <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr><th>日付</th><th>対戦相手</th><th>場所</th><th>時間</th></tr>
-        </thead>
+      <table class="data-table schedule-table">
+        <thead><tr><th>日付</th><th>対戦相手</th><th>場所</th><th>時間</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  container.onclick = event => {
+    const button = event.target.closest('[data-schedule-toggle]');
+    if (!button || !container.contains(button)) return;
+    const detail = container.querySelector(`#schedule-attendance-${button.dataset.scheduleToggle}`);
+    if (!detail) return;
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    detail.hidden = expanded;
+  };
 }
 
 function renderGameDetail(detail) {
@@ -737,7 +760,9 @@ async function loadSiteData() {
 
   if (scheduleEl) {
     try {
-      renderSchedule(scheduleEl, await loadJson('data/schedule.json'));
+      const [schedule, nextGame] = await Promise.all([scheduleDataRequest, nextGameDataRequest]);
+      if (!schedule) throw new Error('failed to load schedule.json');
+      renderSchedule(scheduleEl, schedule, nextGame && nextGame.current);
     } catch (e) {
       scheduleEl.innerHTML = ERROR_NOTE;
     }
