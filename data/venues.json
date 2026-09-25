@@ -7,6 +7,22 @@
       "lat": 33.606,
       "lon": 130.484,
       "tenkiUrl": "https://tenki.jp/leisure/9/43/261/25446/10days.html"
+    },
+    {
+      "name": "北谷運動公園",
+      "aliases": ["太宰府市立北谷運動公園"],
+      "area": "福岡県太宰府市大字北谷941番地1",
+      "lat": 33.5489,
+      "lon": 130.5496,
+      "tenkiUrl": "https://tenki.jp/forecast/9/43/8210/40221/"
+    },
+    {
+      "name": "大佐野スポーツ公園",
+      "aliases": ["太宰府市立大佐野スポーツ公園"],
+      "area": "福岡県太宰府市大字大佐野807番地142外",
+      "lat": 33.4906,
+      "lon": 130.4922,
+      "tenkiUrl": "https://tenki.jp/forecast/9/43/8210/40221/"
     }
   ]
 }

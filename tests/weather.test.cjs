@@ -43,7 +43,12 @@ test('球場マスタ: 正式名とaliasesは一致、部分一致や別球場�
   assert.equal(ctx.findVenue(venues, '駕与丁公園グラウンド').name, '駕与丁公園');
   assert.equal(ctx.findVenue(venues, ' 駕与丁公園 グラウンド').name, '駕与丁公園');
   assert.equal(ctx.findVenue(venues, '駕与丁公園第2グラウンド'), null);
-  assert.equal(ctx.findVenue(venues, '北谷運動公園'), null);
+  assert.equal(ctx.findVenue(venues, '北谷運動公園').name, '北谷運動公園');
+  assert.equal(ctx.findVenue(venues, '太宰府市立北谷運動公園').name, '北谷運動公園');
+  assert.equal(ctx.findVenue(venues, '大佐野スポーツ公園').name, '大佐野スポーツ公園');
+  assert.equal(ctx.findVenue(venues, '太宰府市立大佐野スポーツ公園').name, '大佐野スポーツ公園');
+  assert.equal(ctx.findVenue(venues, '北谷運動公園第2'), null);
+  assert.equal(ctx.findVenue(venues, 'なまずの郷野球場'), null);
   assert.equal(ctx.findVenue(venues, ''), null);
 });
 
@@ -97,9 +102,20 @@ test('tenki.jp URLが未設定なら出典だけを表示', async () => {
   assert.doesNotMatch(el.innerHTML, /tenki\.jp|｜/);
 });
 
+test('太宰府の2球場: 各球場の緯度経度で取得し、tenki.jp(太宰府市)リンクを表示', async () => {
+  for (const [location, lat, lon] of [['北谷運動公園', '33.5489', '130.5496'], ['太宰府市立大佐野スポーツ公園', '33.4906', '130.4922']]) {
+    const env = setup(okApi());
+    const el = await render(env, game({ location, date: '2026-10-04', startTime: '13:00' }));
+    const url = new URL(env.calls[0]);
+    assert.deepEqual([url.searchParams.get('latitude'), url.searchParams.get('longitude')], [lat, lon]);
+    assert.match(el.innerHTML, /13:00開始/);
+    assert.match(el.innerHTML, /<a class="weather-tenki-link" href="https:\/\/tenki\.jp\/forecast\/9\/43\/8210\/40221\/"/);
+  }
+});
+
 test('未登録球場は「予報未設定」、APIは呼ばない', async () => {
   const env = setup(okApi());
-  for (const location of ['北谷運動公園', '交流戦', '']) {
+  for (const location of ['なまずの郷野球場', '交流戦', '']) {
     const el = await render(env, game({ location }));
     assert.match(el.innerHTML, /予報未設定/);
   }
