@@ -1241,23 +1241,26 @@ img { max-width: 100%; display: block; }
 }
 
 .weather-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0 0.8rem;
   margin: 0.3rem 0 0;
   font-size: 0.66rem;
   color: var(--silver);
 }
 
+.weather-foot-sep {
+  margin: 0 0.4em;
+  opacity: 0.6;
+}
+
 .weather-tenki-link {
-  font-weight: 700;
   color: #fff;
   text-decoration: underline;
 }
 
-.weather-credit {
-  margin-left: auto;
+/* 320px幅などで折り返すときも、出典・リンクの文言の途中では切らない */
+.weather-credit,
+.weather-tenki-link {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .weather-credit a {
