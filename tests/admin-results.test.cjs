@@ -4,7 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
-const readJson = (name) => JSON.parse(fs.readFileSync(path.join(root, 'data', name), 'utf8'));
+// 公開中のdata/は管理画面から随時更新されるため、テストは固定データ(tests/fixtures)を使う。
+// アプリが読み書きするパス(data/...)はそのままに、読み込み元だけfixturesへ差し替える
+const fixtures = path.join(__dirname, 'fixtures');
+const fixturePath = (name) => path.join(fixtures, name.replace(/^data\//, ''));
+const readJson = (name) => JSON.parse(fs.readFileSync(fixturePath(name), 'utf8'));
+const readCsv = (date) => fs.readFileSync(fixturePath(`data/raw-games/${date}.csv`), 'utf8');
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const script = fs.readFileSync(path.join(root, 'admin.html'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 
@@ -32,7 +37,7 @@ function setup() {
   const writes = [];
   context.ghGet = async (name) => {
     if (files.has(name)) return { sha: name + ':sha', content: Buffer.from(JSON.stringify(files.get(name))).toString('base64') };
-    const local = path.join(root, name);
+    const local = fixturePath(name);
     if (fs.existsSync(local)) return { sha: name + ':sha', content: fs.readFileSync(local).toString('base64') };
     const error = new Error('Missing CSV'); error.status = 404; throw error;
   };
@@ -82,7 +87,7 @@ function editedPanelBoxscore(env, boxscore) {
   });
 }
 
-test('現在の2026年データ: 全10試合のCSV補完と無変更保存で通算・ランキング・過去年度を完全維持', async () => {
+test('固定データ(2026年10試合): CSV補完と無変更保存で通算・ランキング・過去年度を完全維持', async () => {
   const env = await existing();
   const before = clone(env.stats);
   const resultsBefore = clone(env.results);
@@ -137,7 +142,7 @@ test('打点だけの訂正では既存の率を再計算しない', async () =>
 test('手入力の新規登録・選手削除・試合削除を差分反映できる', async () => {
   const env = await existing();
   const before = clone(env.stats);
-  const csv = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8');
+  const csv = readCsv('2026-09-13');
   const imported = env.functions.buildGameImportFromCsv(csv);
   imported.game.date = '2026-09-27';
   imported.game.boxscore.rows = [imported.game.boxscore.rows[0]];
@@ -159,7 +164,7 @@ test('手入力の新規登録・選手削除・試合削除を差分反映で�
 
 test('CSV取り込みの既存計算と、新規試合を通常保存する計算が一致する', async () => {
   const env = await existing();
-  const imp = env.functions.buildGameImportFromCsv(fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8'));
+  const imp = env.functions.buildGameImportFromCsv(readCsv('2026-09-13'));
   imp.game.date = '2026-09-27';
   env.functions.mergeGameIntoResults(env.results, imp.game, 'league');
   assert.throws(() => env.functions.mergeGameIntoResults(env.results, imp.game, 'league'), /同じ日付/);
@@ -258,7 +263,7 @@ test('盗塁列のない旧boxscoreも未編集保存・日付変更で盗塁を
   const env = setup();
   const results = readJson('results.json');
   const game = results.groups[0].games[0];
-  const imp = env.functions.buildGameImportFromCsv(fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8'));
+  const imp = env.functions.buildGameImportFromCsv(readCsv('2026-09-13'));
   game.boxscore = clone(imp.game.boxscore);
   game.boxscore.headers.pop(); game.boxscore.rows.forEach((r) => r.pop());
   await env.functions.prepareResultBoxscores(results);
@@ -275,7 +280,7 @@ test('盗塁列のない旧boxscoreも未編集保存・日付変更で盗塁を
 test('CSVの実際の保存処理から通常保存・再編集へ移っても二重加算しない', async () => {
   const env = setup();
   env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {}; applyCurrentGroupEditsToStatePrevious = () => {};');
-  const csvText = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
+  const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
   const imp = env.functions.buildGameImportFromCsv(csvText);
   Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
   env.context.importForTest = imp;
@@ -324,7 +329,7 @@ for (const importFirst of [false, true]) {
     const env = setup();
     env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {};');
     if (importFirst) {
-      const csvText = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
+      const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
       const imp = env.functions.buildGameImportFromCsv(csvText);
       Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
       env.context.importForTest = imp;

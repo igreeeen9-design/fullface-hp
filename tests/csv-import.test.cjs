@@ -5,7 +5,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const installGitHub = require('./helpers/csv-github.cjs');
 const root = path.resolve(__dirname, '..');
-const read = (name) => JSON.parse(fs.readFileSync(path.join(root, 'data', name), 'utf8'));
+// 公開中のdata/は管理画面から随時更新されるため、テストは固定データ(tests/fixtures)を使う
+const fixtures = path.join(__dirname, 'fixtures');
+const read = (name) => JSON.parse(fs.readFileSync(path.join(fixtures, name), 'utf8'));
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const script = fs.readFileSync(path.join(root, 'admin.html'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 function setup() {
@@ -20,7 +22,7 @@ function setup() {
   vm.runInContext(script.slice(0, script.lastIndexOf('refreshTokenUI();\nrefreshGcTokenUI();')), context);
   const files = new Map(['results.json', 'stats.json'].map((name) => ['data/' + name, read(name)]));
   const mock = installGitHub(context, files);
-  const csvText = fs.readFileSync(path.join(root, 'data/raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
+  const csvText = fs.readFileSync(path.join(fixtures, 'raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
   const imp = context.buildGameImportFromCsv(csvText);
   Object.assign(imp, { csvText, resultsData: read('results.json'), statsData: read('stats.json'),
     resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha' });

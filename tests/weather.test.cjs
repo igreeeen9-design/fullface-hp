@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
-const venues = JSON.parse(fs.readFileSync(path.join(root, 'data', 'venues.json'), 'utf8')).venues;
+// 公開中のdata/venues.json(本番の球場マスタ)ではなく、仕様確認用の最小限の固定データを使う。
+// テスト球場A: aliasesあり・tenki.jp URLあり / B: URLなし / 第1: 部分一致の確認用 /
+// 座標未設定球場・不正URL球場: 異常系
+const venues = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'venues.json'), 'utf8')).venues;
 const publicScript = fs.readFileSync(path.join(root, 'script.js'), 'utf8');
 const NOW = Date.parse('2026-09-25T10:00:00+09:00');
 
@@ -25,7 +28,7 @@ function setup(apiFetch) {
   return { ctx, calls, storage };
 }
 
-const game = (over = {}) => ({ date: '2026-09-27', startTime: '08:00', location: '駕与丁公園グラウンド', ...over });
+const game = (over = {}) => ({ date: '2026-09-27', startTime: '08:00', location: 'テスト球場Aグラウンド', ...over });
 const hourlyFor = (date, fill = true) => {
   const time = Array.from({ length: 24 }, (_, h) => `${date}T${String(h).padStart(2, '0')}:00`);
   return { time, weather_code: time.map((_, h) => (fill ? (h === 7 ? 61 : 3) : null)), temperature_2m: time.map((_, h) => (fill ? 20 + h / 10 : null)), precipitation: time.map((_, h) => (fill ? (h === 7 ? 0.5 : 0) : null)) };
@@ -36,20 +39,22 @@ async function render(env, g) {
   await env.ctx.renderGameWeather(el, g, NOW);
   return el;
 }
+const split = (html) => html.split('<ul class="weather-list">');
 
-test('球場マスタ: 正式名とaliasesは一致、部分一致や別球場は一致させない', () => {
+test('球場マスタ照合: 正式名・aliasesは完全一致(全角半角・空白の差は吸収)、部分一致や未登録は一致させない', () => {
   const { ctx } = setup(okApi());
-  assert.equal(ctx.findVenue(venues, '駕与丁公園').name, '駕与丁公園');
-  assert.equal(ctx.findVenue(venues, '駕与丁公園グラウンド').name, '駕与丁公園');
-  assert.equal(ctx.findVenue(venues, ' 駕与丁公園 グラウンド').name, '駕与丁公園');
-  assert.equal(ctx.findVenue(venues, '駕与丁公園第2グラウンド'), null);
-  assert.equal(ctx.findVenue(venues, '北谷運動公園').name, '北谷運動公園');
-  assert.equal(ctx.findVenue(venues, '太宰府市立北谷運動公園').name, '北谷運動公園');
-  assert.equal(ctx.findVenue(venues, '大佐野スポーツ公園').name, '大佐野スポーツ公園');
-  assert.equal(ctx.findVenue(venues, '太宰府市立大佐野スポーツ公園').name, '大佐野スポーツ公園');
-  assert.equal(ctx.findVenue(venues, '北谷運動公園第2'), null);
-  assert.equal(ctx.findVenue(venues, 'なまずの郷野球場'), null);
-  assert.equal(ctx.findVenue(venues, ''), null);
+  const find = (name) => { const v = ctx.findVenue(venues, name); return v && v.name; };
+  assert.equal(find('テスト球場A'), 'テスト球場A');
+  assert.equal(find('テスト球場Aグラウンド'), 'テスト球場A');
+  assert.equal(find('市立テスト球場A'), 'テスト球場A');
+  assert.equal(find(' テスト球場Ａ　グラウンド'), 'テスト球場A');
+  assert.equal(find('テスト球場第1'), 'テスト球場第1');
+  assert.equal(find('テスト球場第2'), null);
+  assert.equal(find('テスト球場'), null);
+  assert.equal(find('テスト球場Aグラウンド第2'), null);
+  assert.equal(find('未登録の球場'), null);
+  assert.equal(find(''), null);
+  assert.equal(ctx.findVenue(null, 'テスト球場A'), null);
 });
 
 test('表示時間: 開始2時間前〜終了予定、終了時刻・試合時間があれば優先', () => {
@@ -63,61 +68,57 @@ test('表示時間: 開始2時間前〜終了予定、終了時刻・試合時�
   assert.deepEqual([...ctx.weatherHours({ startTime: null })], []);
 });
 
-test('駕与丁公園: JMAモデル・Asia/Tokyoで取得し、1時間ごとに天気・気温・降水量を表示', async () => {
+test('予報表示: 球場の緯度経度・JMAモデル・Asia/Tokyoで取得し、開始時刻の1行と閉じた時間別一覧を表示', async () => {
   const env = setup(okApi());
   const el = await render(env, game());
   const url = new URL(env.calls[0]);
+  assert.equal(url.searchParams.get('latitude'), '33.1');
+  assert.equal(url.searchParams.get('longitude'), '130.1');
   assert.equal(url.searchParams.get('models'), 'jma_seamless');
   assert.equal(url.searchParams.get('timezone'), 'Asia/Tokyo');
   assert.equal(url.searchParams.get('start_date'), '2026-09-27');
+  assert.equal(url.searchParams.get('end_date'), '2026-09-27');
   assert.equal(url.searchParams.get('hourly'), 'weather_code,temperature_2m,precipitation');
   assert.equal(el.hidden, false);
-  // 初期表示は開始時刻の1行、一覧は閉じた<details>の中
-  const [summary, list] = el.innerHTML.split('<ul class="weather-list">');
+  // 初期表示は見出し・開始時刻の1行だけ。一覧・出典・tenki.jpは閉じた<details>の中
+  const [summary, list] = split(el.innerHTML);
   assert.match(summary, /<details class="weather-details">/); assert.doesNotMatch(summary, /<details[^>]*open/);
   assert.match(summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /試合当日の天気 詳細を見る 閉じる 8:00開始 ☁️ くもり 21℃ 降水0\.0mm/);
+  assert.doesNotMatch(summary, /Open-Meteo|tenki\.jp/);
   assert.deepEqual(list.match(/\d+:00/g), ['6:00', '7:00', '8:00', '9:00', '10:00']);
   assert.match(list, /弱い雨/); assert.match(list, /is-wet[\s\S]*0\.5mm/);
   assert.match(list, /is-start">\s*<span class="weather-time">8:00/);
-  // 出典とtenki.jpリンクは閉じた状態では見えず、一覧の下(details内)に置く
-  assert.doesNotMatch(summary, /Open-Meteo|tenki\.jp/);
-  assert.match(list, /<\/ul>\s*<p class="weather-foot"><span class="weather-credit">天気データ：<a href="https:\/\/open-meteo.com\/"[^]*｜[^]*<a class="weather-tenki-link" href="https:\/\/tenki\.jp\/leisure\/9\/43\/261\/25446\/10days\.html" target="_blank" rel="noopener">tenki\.jpで詳しい予報を見る<\/a><\/p>\s*<\/details>/);
+});
+
+test('tenki.jp URLあり: 一覧の下に「出典 ｜ tenki.jpリンク」を新しいタブで表示', async () => {
+  const env = setup(okApi());
+  const [, list] = split((await render(env, game())).innerHTML);
+  assert.match(list, /<\/ul>\s*<p class="weather-foot"><span class="weather-credit">天気データ：<a href="https:\/\/open-meteo.com\/"[^>]*>Open-Meteo<\/a><\/span><span class="weather-foot-sep">｜<\/span><a class="weather-tenki-link" href="https:\/\/tenki\.jp\/leisure\/test-a\/" target="_blank" rel="noopener">tenki\.jpで詳しい予報を見る<\/a><\/p>\s*<\/details>/);
+});
+
+test('tenki.jp URLなし・https以外: リンクと区切りを出さず出典だけ', async () => {
+  for (const location of ['テスト球場B', '不正URL球場']) {
+    const env = setup(okApi());
+    const el = await render(env, game({ location }));
+    const [, list] = split(el.innerHTML);
+    assert.match(list, /Open-Meteo<\/a><\/span><\/p>\s*<\/details>/);
+    assert.doesNotMatch(el.innerHTML, /tenki\.jp|javascript:|｜/);
+  }
 });
 
 test('1時間以内の再表示はキャッシュを使いAPIを呼ばない', async () => {
   const env = setup(okApi());
   await render(env, game());
-  await render(env, game());
+  await render(env, game({ location: 'テスト球場A' }));
   assert.equal(env.calls.length, 1);
 });
 
-test('tenki.jp URLが未設定なら出典だけを表示', async () => {
+test('未登録球場・座標未設定の球場は「予報未設定」、APIは呼ばない', async () => {
   const env = setup(okApi());
-  env.ctx.venuesRequest = Promise.resolve([{ name: '駕与丁公園', aliases: [], lat: 33.6, lon: 130.4, tenkiUrl: '' }]);
-  vm.runInContext('venuesRequest = this.venuesRequest', env.ctx);
-  const el = await render(env, game({ location: '駕与丁公園' }));
-  const [summary, list] = el.innerHTML.split('<ul class="weather-list">');
-  assert.doesNotMatch(summary, /tenki\.jp/);
-  assert.match(list, /Open-Meteo<\/a><\/span><\/p>\s*<\/details>/);
-  assert.doesNotMatch(el.innerHTML, /tenki\.jp|｜/);
-});
-
-test('太宰府の2球場: 各球場の緯度経度で取得し、tenki.jp(太宰府市)リンクを表示', async () => {
-  for (const [location, lat, lon] of [['北谷運動公園', '33.5489', '130.5496'], ['太宰府市立大佐野スポーツ公園', '33.4906', '130.4922']]) {
-    const env = setup(okApi());
-    const el = await render(env, game({ location, date: '2026-10-04', startTime: '13:00' }));
-    const url = new URL(env.calls[0]);
-    assert.deepEqual([url.searchParams.get('latitude'), url.searchParams.get('longitude')], [lat, lon]);
-    assert.match(el.innerHTML, /13:00開始/);
-    assert.match(el.innerHTML, /<a class="weather-tenki-link" href="https:\/\/tenki\.jp\/forecast\/9\/43\/8210\/40221\/"/);
-  }
-});
-
-test('未登録球場は「予報未設定」、APIは呼ばない', async () => {
-  const env = setup(okApi());
-  for (const location of ['なまずの郷野球場', '交流戦', '']) {
+  for (const location of ['未登録の球場', '交流戦', '', '座標未設定球場']) {
     const el = await render(env, game({ location }));
     assert.match(el.innerHTML, /予報未設定/);
+    assert.doesNotMatch(el.innerHTML, /weather-list/);
   }
   assert.equal(env.calls.length, 0);
 });

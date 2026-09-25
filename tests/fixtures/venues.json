@@ -1,0 +1,36 @@
+{
+  "venues": [
+    {
+      "name": "テスト球場A",
+      "aliases": ["テスト球場Aグラウンド", "市立テスト球場A"],
+      "lat": 33.1,
+      "lon": 130.1,
+      "tenkiUrl": "https://tenki.jp/leisure/test-a/"
+    },
+    {
+      "name": "テスト球場B",
+      "aliases": [],
+      "lat": 33.2,
+      "lon": 130.2,
+      "tenkiUrl": ""
+    },
+    {
+      "name": "テスト球場第1",
+      "lat": 33.3,
+      "lon": 130.3,
+      "tenkiUrl": ""
+    },
+    {
+      "name": "座標未設定球場",
+      "aliases": [],
+      "tenkiUrl": "https://tenki.jp/leisure/no-coords/"
+    },
+    {
+      "name": "不正URL球場",
+      "aliases": [],
+      "lat": 33.4,
+      "lon": 130.4,
+      "tenkiUrl": "javascript:alert(1)"
+    }
+  ]
+}
