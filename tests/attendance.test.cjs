@@ -6,7 +6,8 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const clone = value => JSON.parse(JSON.stringify(value));
-const read = name => JSON.parse(fs.readFileSync(path.join(root, 'data', name), 'utf8'));
+// 公開中のdata/*.jsonは管理画面から随時更新されるため、テストは固定データ(tests/fixtures)を使う
+const read = name => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8'));
 const admin = fs.readFileSync(path.join(root, 'admin.html'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 const publicScript = fs.readFileSync(path.join(root, 'script.js'), 'utf8');
 const shared = fs.readFileSync(path.join(root, 'game-attendance.js'), 'utf8');
@@ -230,17 +231,6 @@ test('旧日程データの保存はIDを付与し、並べ替えても参加予
   const saved=env.writes[0].data.games;
   assert.deepEqual(saved.find(g=>g.id==='schedule-1').attendance,fixtureAttendance);
   assert.match(saved.find(g=>g.opponent==='3ColorRuns').id,/^schedule-/);
-});
-
-test('移行データ: 登録済み9人と更新日時を完全維持し、次戦には参照だけを保持', () => {
-  const {execFileSync}=require('node:child_process');
-  const before=JSON.parse(execFileSync('git',['show','06e5fc2:data/next-game.json'],{cwd:root,encoding:'utf8'}));
-  const schedule=read('schedule.json'); const next=read('next-game.json');
-  assert.equal(schedule.games[0].attendance.members.length,9);
-  assert.deepEqual(schedule.games[0].attendance,before.current.attendance);
-  const copy=clone(next); delete copy.current.scheduleGameId; copy.current.attendance=before.current.attendance;
-  assert.deepEqual(copy,before);
-  assert.equal(next.current.scheduleGameId,schedule.games[0].id);
 });
 
 test('旧next-gameの参加者も日程編集で失わず、scheduleへの初回保存時に引き継ぐ', async () => {

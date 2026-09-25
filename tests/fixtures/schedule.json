@@ -1,0 +1,73 @@
+{
+  "games": [
+    {
+      "date": "2026-09-27",
+      "opponent": "六本松 BLACK SOX",
+      "location": "駕与丁公園",
+      "time": "8:00",
+      "id": "schedule-1",
+      "attendance": {
+        "members": [
+          {
+            "name": "井口",
+            "number": "1"
+          },
+          {
+            "name": "中西",
+            "number": "4"
+          },
+          {
+            "name": "真鍋",
+            "number": "7"
+          },
+          {
+            "name": "田中（敬）",
+            "number": "8"
+          },
+          {
+            "name": "道下",
+            "number": "13"
+          },
+          {
+            "name": "古賀",
+            "number": "16"
+          },
+          {
+            "name": "桑原",
+            "number": "19"
+          },
+          {
+            "name": "大淵",
+            "number": "25"
+          },
+          {
+            "name": "田中（桜）",
+            "number": "61"
+          }
+        ],
+        "updatedAt": "2026-09-23T11:22:38.449Z"
+      }
+    },
+    {
+      "date": "2026-10-04",
+      "opponent": "3ColorRuns",
+      "location": "北谷運動公園",
+      "time": "13:00",
+      "id": "schedule-2"
+    },
+    {
+      "date": null,
+      "opponent": "Blue Bandits",
+      "location": "リーグ戦",
+      "time": null,
+      "id": "schedule-3"
+    },
+    {
+      "date": null,
+      "opponent": "Marshall",
+      "location": "交流戦",
+      "time": null,
+      "id": "schedule-4"
+    }
+  ]
+}
