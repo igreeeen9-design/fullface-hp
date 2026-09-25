@@ -67,10 +67,13 @@ test('駕与丁公園: JMAモデル・Asia/Tokyoで取得し、1時間ごとに�
   assert.equal(url.searchParams.get('start_date'), '2026-09-27');
   assert.equal(url.searchParams.get('hourly'), 'weather_code,temperature_2m,precipitation');
   assert.equal(el.hidden, false);
-  assert.deepEqual(el.innerHTML.match(/\d+:00/g), ['6:00', '7:00', '8:00', '9:00', '10:00']);
-  assert.match(el.innerHTML, /弱い雨/); assert.match(el.innerHTML, /くもり/);
-  assert.match(el.innerHTML, /21℃/); assert.match(el.innerHTML, /降水 0\.5mm/); assert.match(el.innerHTML, /降水 0\.0mm/);
-  assert.match(el.innerHTML, /is-start[\s\S]*8:00<small>開始/);
+  // 初期表示は開始時刻の1行、一覧は閉じた<details>の中
+  const [summary, list] = el.innerHTML.split('<ul class="weather-list">');
+  assert.match(summary, /<details class="weather-details">/); assert.doesNotMatch(summary, /<details[^>]*open/);
+  assert.match(summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /試合当日の天気 詳細を見る 閉じる 8:00開始 ☁️ くもり 21℃ 降水0\.0mm/);
+  assert.deepEqual(list.match(/\d+:00/g), ['6:00', '7:00', '8:00', '9:00', '10:00']);
+  assert.match(list, /弱い雨/); assert.match(list, /is-wet[\s\S]*0\.5mm/);
+  assert.match(list, /is-start">\s*<span class="weather-time">8:00/);
   assert.match(el.innerHTML, /天気データ：<a href="https:\/\/open-meteo.com\/"/);
   assert.doesNotMatch(el.innerHTML, /tenki\.jp/); // URL未設定ならボタン自体を出さない
 });

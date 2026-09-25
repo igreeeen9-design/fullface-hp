@@ -163,31 +163,60 @@ function pickWeatherRows(hourly, date, hours) {
   return rows.some((r) => r.code != null || r.temp != null) ? rows : null;
 }
 
-function renderWeatherRows(rows, startHour) {
-  return `<ul class="weather-list">${rows.map((r) => {
-    const w = r.code == null ? { icon: '―', label: '―' } : weatherLabel(r.code);
-    const temp = r.temp == null ? '―' : `${Math.round(r.temp)}℃`;
-    const precip = r.precip == null ? '―' : `${Number(r.precip).toFixed(1)}mm`;
-    const isStart = r.hour === startHour;
-    return `<li class="weather-row${isStart ? ' is-start' : ''}${r.precip > 0 ? ' is-wet' : ''}">
-      <span class="weather-time">${r.hour}:00${isStart ? '<small>開始</small>' : ''}</span>
-      <span class="weather-icon" aria-hidden="true">${w.icon}</span>
-      <span class="weather-desc">${escapeHtml(w.label)}</span>
-      <span class="weather-values">
-        <span class="weather-temp">${temp}</span>
-        <span class="weather-precip">降水 ${precip}</span>
-      </span>
-    </li>`;
-  }).join('')}</ul>`;
+function weatherCells(r) {
+  const w = r.code == null ? { icon: '―', label: '―' } : weatherLabel(r.code);
+  return {
+    icon: w.icon,
+    label: escapeHtml(w.label),
+    temp: r.temp == null ? '―' : `${Math.round(r.temp)}℃`,
+    precip: r.precip == null ? '―' : `${Number(r.precip).toFixed(1)}mm`,
+    wet: r.precip > 0,
+  };
 }
 
-function weatherBox(inner, venue) {
+// 初期表示は試合開始時刻の1行だけ。1時間ごとの一覧は<details>で閉じておき、
+// 開いたときだけ表示する(次戦情報の中で天気欄が縦に場所を取りすぎないように)
+function renderWeatherForecast(rows, game) {
+  const startMinutes = parseClockMinutes(game.startTime);
+  const startHour = Math.floor(startMinutes / 60);
+  const startLabel = `${startHour}:${String(startMinutes % 60).padStart(2, '0')}`;
+  const startRow = rows.find((r) => r.hour === startHour);
+  const now = weatherCells(startRow);
+  const list = rows.map((r) => {
+    const c = weatherCells(r);
+    return `<li class="weather-row${r.hour === startHour ? ' is-start' : ''}${c.wet ? ' is-wet' : ''}">
+        <span class="weather-time">${r.hour}:00</span>
+        <span class="weather-icon" aria-hidden="true">${c.icon}</span>
+        <span class="weather-desc">${c.label}</span>
+        <span class="weather-temp">${c.temp}</span>
+        <span class="weather-precip">${c.precip}</span>
+      </li>`;
+  }).join('');
+  return `<details class="weather-details">
+    <summary>
+      <span class="weather-heading">試合当日の天気</span>
+      <span class="weather-toggle"><span class="weather-toggle-open">詳細を見る</span><span class="weather-toggle-close">閉じる</span></span>
+      <span class="weather-now${now.wet ? ' is-wet' : ''}">
+        <span class="weather-now-time">${startLabel}開始</span>
+        <span class="weather-now-sky"><span aria-hidden="true">${now.icon}</span>${now.label}</span>
+        <span class="weather-now-temp">${now.temp}</span>
+        <span class="weather-now-precip">降水${now.precip}</span>
+      </span>
+    </summary>
+    <ul class="weather-list">
+      <li class="weather-row weather-row-head" aria-hidden="true"><span>時刻</span><span></span><span>天気</span><span>気温</span><span>降水</span></li>
+      ${list}
+    </ul>
+  </details>`;
+}
+
+// 予報一覧があるときは見出しを開閉ボタンと同じ行(summary内)に置くため、ここでは出さない
+function weatherBox(inner, venue, withHeading = true) {
   const tenki = venue && /^https:\/\//.test(venue.tenkiUrl || '')
     ? `<a class="weather-tenki-link" href="${escapeHtml(venue.tenkiUrl)}" target="_blank" rel="noopener">tenki.jpで詳しい予報を見る</a>` : '';
-  return `<h3>試合当日の天気予報</h3>
+  return `${withHeading ? '<p class="weather-heading">試合当日の天気</p>' : ''}
     ${inner}
-    ${tenki}
-    <p class="weather-credit">天気データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁モデル）</p>`;
+    <p class="weather-foot">${tenki}<span class="weather-credit">天気データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></span></p>`;
 }
 
 const weatherMessage = (text) => `<p class="weather-message">${escapeHtml(text)}</p>`;
@@ -227,8 +256,9 @@ async function renderGameWeather(container, game, now = Date.now()) {
   try {
     const result = await fetchHourlyWeather(venue, game.date, now);
     const rows = result.status === 'ok' ? pickWeatherRows(result.hourly, game.date, hours) : null;
-    const startHour = Math.floor(parseClockMinutes(game.startTime) / 60);
-    container.innerHTML = weatherBox(rows ? renderWeatherRows(rows, startHour) : weatherMessage('予報はまだ出ていません'), venue);
+    container.innerHTML = (rows
+      ? weatherBox(renderWeatherForecast(rows, game), venue, false)
+      : weatherBox(weatherMessage('予報はまだ出ていません'), venue));
   } catch (e) {
     container.innerHTML = weatherBox(weatherMessage('天気予報を取得できませんでした'), venue);
   }
