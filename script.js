@@ -180,6 +180,7 @@ function renderNextGame(container, data) {
       <div class="fact"><dt>試合会場</dt><dd>${g.location ? venueLink(g.location) : '未定'}</dd></div>
       <div class="fact"><dt>集合時間</dt><dd>${escapeHtml(g.meetTime) || '未定'}</dd></div>
     </dl>
+    <div class="next-game-weather" id="nextGameWeather" hidden></div>
     ${renderAttendance(g.attendance)}
     <div class="next-game-lineup">
       <h3>スタメン（予定）</h3>
@@ -236,6 +237,10 @@ async function loadNextGame() {
     const attendance = nextGameAttendance(schedule ? schedule.games || [] : [], current);
     if (container) renderNextGame(container, { ...data, current: { ...current, attendance } });
     renderHeroNextGame(data);
+    // 天気予報は外部APIに依存するため、失敗しても次戦情報の表示には影響させない
+    if (typeof renderGameWeather === 'function') {
+      renderGameWeather(document.getElementById('nextGameWeather'), current).catch(() => {});
+    }
   } catch (e) {
     if (container) container.innerHTML = '<p class="placeholder-note">次戦情報の読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
     const heroEl = document.getElementById('heroNextGame');

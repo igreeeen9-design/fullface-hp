@@ -1067,6 +1067,142 @@ img { max-width: 100%; display: block; }
   margin: 0;
 }
 
+/* 試合当日の天気予報。スマホで一目で読めるよう1時間1行の縦並びにし、
+   PCでも横に広がりすぎないよう最大幅を抑える */
+.next-game-weather[hidden] {
+  display: none;
+}
+
+.next-game-weather {
+  max-width: 480px;
+  background: var(--navy);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 0.9rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.next-game-weather h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.weather-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.weather-row {
+  display: grid;
+  grid-template-columns: 3.2em 1.7em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.2rem;
+  border-top: 1px solid var(--pinstripe);
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.weather-row:first-child {
+  border-top: none;
+}
+
+/* 試合開始の行だけ少し強調する */
+.weather-row.is-start {
+  background: var(--accent-light);
+  border-radius: 8px;
+}
+
+.weather-time {
+  font-family: var(--font-display);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.weather-time small {
+  display: block;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--red-light);
+  letter-spacing: 0.05em;
+}
+
+.weather-row.is-start .weather-time small {
+  color: #fff;
+}
+
+.weather-icon {
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+.weather-desc {
+  font-size: 0.82rem;
+  color: var(--silver);
+  overflow-wrap: anywhere;
+}
+
+/* 気温と降水量は右端にまとめる。320px幅のスマホでも天気の説明文が
+   1文字ずつ折り返されないよう、横並びにせず上下に積む */
+.weather-values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.weather-temp {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.weather-precip {
+  font-size: 0.8rem;
+  color: var(--silver);
+  white-space: nowrap;
+}
+
+.weather-row.is-wet .weather-precip {
+  color: #8ec5ff;
+  font-weight: 700;
+}
+
+.weather-message {
+  margin: 0.2rem 0;
+  color: var(--silver);
+  font-size: 0.9rem;
+}
+
+.weather-tenki-link {
+  display: block;
+  margin-top: 0.8rem;
+  padding: 0.55rem 0.8rem;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--navy);
+  background: #fff;
+  border-radius: 999px;
+}
+
+.weather-tenki-link:hover {
+  background: var(--off-white);
+}
+
+.weather-credit {
+  margin: 0.7rem 0 0;
+  font-size: 0.7rem;
+  color: var(--silver);
+}
+
+.weather-credit a {
+  text-decoration: underline;
+}
+
 /* Footer */
 .site-footer {
   background: var(--navy-dark);
