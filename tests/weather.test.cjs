@@ -74,10 +74,9 @@ test('駕与丁公園: JMAモデル・Asia/Tokyoで取得し、1時間ごとに�
   assert.deepEqual(list.match(/\d+:00/g), ['6:00', '7:00', '8:00', '9:00', '10:00']);
   assert.match(list, /弱い雨/); assert.match(list, /is-wet[\s\S]*0\.5mm/);
   assert.match(list, /is-start">\s*<span class="weather-time">8:00/);
-  // 出典は閉じた状態では見えず、一覧の下(details内)に置く。tenki.jp URL未設定なら出典だけ
-  assert.doesNotMatch(summary, /Open-Meteo/);
-  assert.match(list, /<\/ul>\s*<p class="weather-foot"><span class="weather-credit">天気データ：<a href="https:\/\/open-meteo.com\/"[^]*<\/p>\s*<\/details>/);
-  assert.doesNotMatch(el.innerHTML, /tenki\.jp|｜/);
+  // 出典とtenki.jpリンクは閉じた状態では見えず、一覧の下(details内)に置く
+  assert.doesNotMatch(summary, /Open-Meteo|tenki\.jp/);
+  assert.match(list, /<\/ul>\s*<p class="weather-foot"><span class="weather-credit">天気データ：<a href="https:\/\/open-meteo.com\/"[^]*｜[^]*<a class="weather-tenki-link" href="https:\/\/tenki\.jp\/leisure\/9\/43\/261\/25446\/10days\.html" target="_blank" rel="noopener">tenki\.jpで詳しい予報を見る<\/a><\/p>\s*<\/details>/);
 });
 
 test('1時間以内の再表示はキャッシュを使いAPIを呼ばない', async () => {
@@ -87,14 +86,15 @@ test('1時間以内の再表示はキャッシュを使いAPIを呼ばない', a
   assert.equal(env.calls.length, 1);
 });
 
-test('tenki.jp URLが設定されていればリンクを表示', async () => {
+test('tenki.jp URLが未設定なら出典だけを表示', async () => {
   const env = setup(okApi());
-  env.ctx.venuesRequest = Promise.resolve([{ name: '駕与丁公園', aliases: [], lat: 33.6, lon: 130.4, tenkiUrl: 'https://tenki.jp/leisure/x/' }]);
+  env.ctx.venuesRequest = Promise.resolve([{ name: '駕与丁公園', aliases: [], lat: 33.6, lon: 130.4, tenkiUrl: '' }]);
   vm.runInContext('venuesRequest = this.venuesRequest', env.ctx);
   const el = await render(env, game({ location: '駕与丁公園' }));
   const [summary, list] = el.innerHTML.split('<ul class="weather-list">');
   assert.doesNotMatch(summary, /tenki\.jp/);
-  assert.match(list, /Open-Meteo<\/a><\/span><span class="weather-foot-sep">｜<\/span><a class="weather-tenki-link" href="https:\/\/tenki\.jp\/leisure\/x\/"[^>]*>tenki\.jpで詳しい予報を見る<\/a><\/p>\s*<\/details>/);
+  assert.match(list, /Open-Meteo<\/a><\/span><\/p>\s*<\/details>/);
+  assert.doesNotMatch(el.innerHTML, /tenki\.jp|｜/);
 });
 
 test('未登録球場は「予報未設定」、APIは呼ばない', async () => {
