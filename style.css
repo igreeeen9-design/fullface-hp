@@ -1278,8 +1278,8 @@ img { max-width: 100%; display: block; }
 
 .footer-logo {
   display: block;
-  width: 110px;
-  height: 110px;
+  width: 80px;
+  height: 80px;
   margin: 0 auto 0.75rem;
   border-radius: 50%;
   background: #fff;
