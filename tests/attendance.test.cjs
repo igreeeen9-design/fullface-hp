@@ -556,3 +556,82 @@ test('次戦なしの確認は空になることを明示し、終了操作は�
   const html = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
   assert.match(html, /<details class="transition-actions"><summary>試合を終了・中止する<\/summary>[\s\S]*?id="archiveBtn"[\s\S]*?id="cancelGameBtn"[\s\S]*?<\/details>/);
 });
+
+test('参加予定の任意打順・守備を保存し旧データと助っ人も保持、次戦は変更しない', async () => {
+  const env = setup();
+  await env.run('loadAttendanceEditor()');
+  env.run("attendanceOptions.find(p => p.name === '井口').order = '2'; attendanceOptions.find(p => p.name === '井口').position = '捕';");
+  await env.run('saveAttendance()');
+  const member = env.writes[0].data.games[0].attendance.members.find(p => p.name === '井口');
+  assert.equal(member.order, 2); assert.equal(member.position, '捕');
+  const guest = env.writes[0].data.games[0].attendance.members.find(p => p.name === '助っ人');
+  assert.ok(!('order' in guest)); assert.ok(!('position' in guest));
+  assert.ok(env.writes.every(write => write.file === 'data/schedule.json'));
+});
+
+test('参加予定を再読込しても名簿との統合で打順・守備を失わない', () => {
+  const env = setup();
+  const options = env.ctx.buildAttendanceOptions([{ name: '井口', number: '1' }], { members: [{ name: '井口', number: '1', order: 3, position: '遊' }] });
+  assert.equal(options[0].order, 3); assert.equal(options[0].position, '遊');
+});
+
+test('参加予定から作る案は打順順・未定は空欄、コピー後は双方独立', () => {
+  const env = setup();
+  const attendance = { members: [{ name: '未定', number: '1' }, { name: '後', order: 5, position: '左' }, { name: '先', order: 2, position: '遊' }] };
+  const lineup = env.ctx.lineupFromAttendance(attendance);
+  assert.deepEqual(clone(lineup).map(p => p.name), ['先', '後', '未定']);
+  assert.equal(lineup[2].order, ''); assert.equal(lineup[2].position, '');
+  lineup[0].position = '二';
+  assert.equal(attendance.members[2].position, '遊');
+  attendance.members[1].name = '変更';
+  assert.equal(lineup[1].name, '後');
+});
+
+test('スタメン案作成は対象を確認してフォームだけ変更、参加予定や次戦JSONを自動保存しない', async () => {
+  const env = setup();
+  await env.run('loadAttendanceEditor()');
+  env.ctx.document.querySelector = () => ({ click() {} });
+  env.run('copiedLineup = null; renderLineup = players => { copiedLineup = players; };');
+  let confirmation;
+  env.ctx.confirm = text => { confirmation = text; return true; };
+  const before = clone(env.original);
+  await env.run('copyAttendanceLineup()');
+  assert.match(confirmation, /2026-09-27/); assert.match(confirmation, /上書き/);
+  assert.equal(env.run('copiedLineup.length'), 2);
+  assert.equal(env.writes.length, 0);
+  assert.deepEqual(env.original, before);
+});
+
+test('別試合・同日同一相手でもID不一致ならスタメン案を上書きしない', async () => {
+  const env = setup();
+  env.original.current.scheduleGameId = 'different';
+  let rendered = false; env.ctx.renderLineup = () => { rendered = true; };
+  await env.run('copyAttendanceLineup()');
+  assert.equal(rendered, false); assert.equal(env.writes.length, 0);
+  assert.match(env.node('statusMsg').textContent, /一致しません/);
+});
+
+test('案の作成をキャンセルした場合と参加予定未保存の場合は変更しない', async () => {
+  for (const absent of [false, true]) {
+    const env = setup();
+    if (absent) delete env.schedule.games[0].attendance;
+    env.ctx.confirm = () => false;
+    let rendered = false; env.ctx.renderLineup = () => { rendered = true; };
+    await env.run('copyAttendanceLineup()');
+    assert.equal(rendered, false); assert.equal(env.writes.length, 0);
+  }
+});
+
+test('フォーム収集はコピーした空欄・指定打順を保持し通常行は従来どおり連番', () => {
+  const env = setup();
+  const row = order => ({ ...(order !== undefined ? { _plannedOrder: order } : {}), querySelector: selector => ({ value: selector === '.name-input' ? '選手' : '' }) });
+  env.ctx.document.querySelectorAll = selector => selector.includes('lineupRows') ? [row(5), row(''), row(undefined)] : [];
+  assert.deepEqual(clone(env.run('collectNextGameForm().lineup')).map(p => p.order), [5, '', 3]);
+});
+
+test('参加予定の不正な打順は保存前に停止する', async () => {
+  const env = setup(); await env.run('loadAttendanceEditor()');
+  env.run("attendanceOptions.find(p => p.selected).order = '-1';");
+  await env.run('saveAttendance()');
+  assert.equal(env.writes.length, 0); assert.match(env.node('statusMsg').textContent, /整数か空欄/);
+});

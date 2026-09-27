@@ -634,6 +634,8 @@
       </div>
       <p id="attendanceEditorStatus" class="admin-note" role="status"></p>
       <button type="button" class="admin-btn admin-btn-primary" id="saveAttendanceBtn" disabled>参加予定を公開・更新</button>
+      <p class="admin-note">打順・守備位置は任意です。スタメンへ自動同期しません。案の作成には保存済みの参加予定を使います。</p>
+      <button type="button" class="admin-btn admin-btn-secondary" id="attendanceLineupBtn" hidden>参加予定からスタメン案を作成</button>
     </section>
   </div>
 
@@ -890,9 +892,10 @@ function ensureTabLoaded(tab) {
 
 /* ================== 次戦情報 ================== */
 
-function makeLineupRow(name, number, position, comment) {
+function makeLineupRow(name, number, position, comment, plannedOrder) {
   const row = document.createElement('div');
   row.className = 'lineup-row';
+  if (plannedOrder !== undefined) row._plannedOrder = plannedOrder;
   row.innerHTML = `
     <div class="lineup-row-main">
       <div class="row-order"></div>
@@ -939,6 +942,7 @@ function wireRowButtons(row, containerId) {
       } else if (act === 'down' && row.nextElementSibling) {
         container.insertBefore(row.nextElementSibling, row);
       }
+      if (containerId === 'lineupRows') document.querySelectorAll('#lineupRows .lineup-row').forEach(item => delete item._plannedOrder);
       renumberLineup();
     });
   });
@@ -947,7 +951,7 @@ function wireRowButtons(row, containerId) {
 function renumberLineup() {
   const rows = document.querySelectorAll('#lineupRows .lineup-row');
   rows.forEach((row, i) => {
-    row.querySelector('.row-order').textContent = `${i + 1}番`;
+    row.querySelector('.row-order').textContent = row._plannedOrder === '' ? '未定' : `${row._plannedOrder ?? i + 1}番`;
   });
 }
 
@@ -955,7 +959,7 @@ function renderLineup(lineup) {
   const container = document.getElementById('lineupRows');
   container.innerHTML = '';
   const seed = (lineup && lineup.length) ? lineup : Array.from({ length: 10 }, () => ({ name: '', number: '', position: '', comment: '' }));
-  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.number, p.position, p.comment)));
+  seed.forEach((p) => container.appendChild(makeLineupRow(p.name, p.number, p.position, p.comment, p.order)));
   renumberLineup();
 }
 
@@ -983,6 +987,7 @@ function buildAttendanceOptions(roster, attendance) {
     const key = attendanceMemberKey(item);
     if (!options.has(key)) options.set(key, item);
     else if (selected) options.get(key).selected = true;
+    if (selected) { options.get(key).order = member.order ?? ''; options.get(key).position = member.position || ''; }
   };
   roster.forEach((member) => add(member, false));
   // 名簿から削除・改名された人や助っ人も、保存済みなら消さない。
@@ -991,7 +996,11 @@ function buildAttendanceOptions(roster, attendance) {
 }
 
 function collectAttendanceMembers() {
-  return attendanceOptions.filter((p) => p.selected).map((p) => ({ name: p.name, number: p.number }));
+  return attendanceOptions.filter((p) => p.selected).map((p) => {
+    const order = String(p.order ?? '').trim();
+    if (order && (!/^\d+$/.test(order) || !Number.isSafeInteger(Number(order)) || Number(order) < 1)) throw new Error(`${p.name}の打順は1以上の整数か空欄にしてください。`);
+    return { name: p.name, number: p.number, ...(order ? { order: Number(order) } : {}), ...(String(p.position || '').trim() ? { position: String(p.position).trim() } : {}) };
+  });
 }
 
 function selectedAttendanceGame() {
@@ -1015,15 +1024,18 @@ function updateAttendanceSummary() {
     ? `公開対象：${formatDateOnly(game.date)} ${game.opponent}` : '日付が確定した保存済みの試合を選択してください。';
   document.getElementById('attendancePublished').textContent = attendance
     ? `公開中の参加予定：${attendance.members.length}人` : '参加予定は未設定です。';
-  document.getElementById('attendanceCount').textContent = `選択中：${collectAttendanceMembers().length}人`;
+  document.getElementById('attendanceCount').textContent = `選択中：${attendanceOptions.filter(p => p.selected).length}人`;
   document.getElementById('saveAttendanceBtn').disabled = !attendanceReady || !game || !game.date;
   document.getElementById('addAttendanceGuestBtn').disabled = !attendanceReady || !game;
+  document.getElementById('attendanceLineupBtn').hidden = !attendanceReady || !game?.id || game.id !== attendanceLegacyCurrent?.scheduleGameId;
 }
 
 function renderAttendanceOptions() {
   document.getElementById('attendanceOptions').innerHTML = attendanceOptions.map((p, i) => `
-    <label class="attendance-option"><input type="checkbox" data-attendance-index="${i}" ${p.selected ? 'checked' : ''}>
-      <span>${escapeAttr(p.name)}${p.number ? `［${escapeAttr(p.number)}］` : ''}</span></label>`).join('');
+    <div><label class="attendance-option"><input type="checkbox" data-attendance-index="${i}" ${p.selected ? 'checked' : ''}>
+      <span>${escapeAttr(p.name)}${p.number ? `［${escapeAttr(p.number)}］` : ''}</span></label>
+      <label>打順（任意）<input type="number" min="1" step="1" data-attendance-field="order" data-member-index="${i}" value="${escapeAttr(p.order ?? '')}" style="width:5rem"></label>
+      <label>守備（任意）<input type="text" list="positionOptions" data-attendance-field="position" data-member-index="${i}" value="${escapeAttr(p.position || '')}" style="width:6rem"></label></div>`).join('');
   updateAttendanceSummary();
 }
 
@@ -1055,10 +1067,16 @@ async function loadAttendanceEditor() {
 document.getElementById('attendanceGameSelect').addEventListener('change', resetAttendanceEditor);
 
 document.getElementById('attendanceOptions').addEventListener('change', (e) => {
+  const field = e.target.dataset.attendanceField;
+  if (['order', 'position'].includes(field)) {
+    const member = attendanceOptions[e.target.dataset.memberIndex];
+    if (member) member[field] = e.target.value;
+    return;
+  }
   const index = e.target.dataset.attendanceIndex;
   if (index === undefined || !attendanceOptions[index]) return;
   attendanceOptions[index].selected = e.target.checked;
-  document.getElementById('attendanceCount').textContent = `選択中：${collectAttendanceMembers().length}人`;
+  document.getElementById('attendanceCount').textContent = `選択中：${attendanceOptions.filter(p => p.selected).length}人`;
 });
 
 document.getElementById('addAttendanceGuestBtn').addEventListener('click', () => {
@@ -1109,6 +1127,41 @@ async function saveAttendance() {
   }
 }
 
+// 明示操作で保存済み参加予定から独立した案を作る。公開は既存の公開ボタンで行う。
+function lineupFromAttendance(attendance) {
+  return (attendance?.members || []).map(member => ({ name: member.name, number: member.number || '',
+    order: member.order ?? '', position: member.position || '', comment: '' }))
+    .sort((a, b) => (a.order === '' ? Infinity : Number(a.order)) - (b.order === '' ? Infinity : Number(b.order)));
+}
+async function copyAttendanceLineup() {
+  const button = document.getElementById('attendanceLineupBtn');
+  const selectedId = selectedAttendanceGame()?.id;
+  if (!selectedId || button.disabled) return;
+  button.disabled = true;
+  try {
+    const [nextJson, scheduleJson] = await Promise.all([ghGet(FILES.nextGame), ghGet(FILES.schedule)]);
+    const next = JSON.parse(base64ToUtf8(nextJson.content));
+    const games = JSON.parse(base64ToUtf8(scheduleJson.content)).games || [];
+    const matches = games.filter(game => game.id === selectedId);
+    if (next.current?.scheduleGameId !== selectedId || matches.length !== 1) throw new Error('選択した試合は現在の次戦と一致しません。再読み込みしてください。');
+    const game = matches[0];
+    if (!game.attendance) throw new Error('参加予定を先に保存してください。');
+    if (states.nextGame && states.nextGame.data.current?.scheduleGameId !== selectedId) throw new Error('次戦画面の対象が古くなっています。次戦情報を再読み込みしてください。');
+    if (!confirm(`${game.date} ${game.opponent}\n保存済み参加予定からスタメン案を作成します。現在のスタメン予定（未保存の入力を含む）を上書きします。公開はまだ行いません。よろしいですか？`)) return;
+    if (!states.nextGame) {
+      states.nextGame = { data: next, sha: nextJson.sha };
+      fillNextGameForm(next.current);
+    }
+    tabsLoaded.nextgame = true;
+    renderLineup(lineupFromAttendance(game.attendance));
+    document.querySelector('[data-tab="nextgame"]').click();
+    // タブ読込による案の上書きを避ける。
+    showStatus('ok', 'スタメン案を作成しました。内容を確認し、下書き保存または公開してください。参加予定は変更していません。');
+  } catch (error) { showStatus('err', error.message); }
+  finally { button.disabled = false; }
+}
+document.getElementById('attendanceLineupBtn').addEventListener('click', copyAttendanceLineup);
+
 document.getElementById('saveAttendanceBtn').addEventListener('click', saveAttendance);
 
 function fillNextGameForm(current) {
@@ -1124,7 +1177,7 @@ function fillNextGameForm(current) {
 
 function collectNextGameForm() {
   const lineup = Array.from(document.querySelectorAll('#lineupRows .lineup-row')).map((row, i) => ({
-    order: i + 1,
+    order: row._plannedOrder ?? i + 1,
     name: row.querySelector('.name-input').value.trim(),
     number: row.querySelector('.number-input').value.trim(),
     position: row.querySelector('.pos-input').value.trim(),
