@@ -525,16 +525,6 @@
     </section>
 
     <section class="admin-card">
-      <h2>いつものオーダー</h2>
-      <p class="admin-note">通常使用するスタメン・打順・守備位置を1件だけ登録できます。「読み込む」を押しても、その場では公開されません。</p>
-      <div id="defaultOrderInfo" class="admin-note"></div>
-      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.8rem;">
-        <button type="button" class="admin-btn admin-btn-secondary" id="loadDefaultOrderBtn" style="flex:1 1 45%;">いつものオーダーを読み込む</button>
-        <button type="button" class="admin-btn admin-btn-secondary" id="saveDefaultOrderBtn" style="flex:1 1 45%;">現在の内容をいつものオーダーとして保存</button>
-      </div>
-    </section>
-
-    <section class="admin-card">
       <h2>次戦の基本情報</h2>
       <div class="field">
         <label for="opponentInput">対戦相手</label>
@@ -1201,11 +1191,13 @@ function collectNextGameForm() {
   };
 }
 
-// 「下書き」は data/next-game.json の drafts 配列(複数保存可)に、current/history/defaultOrder
-// と並べて保存する。「いつものオーダー」は defaultOrder として独立して1件だけ保存する。
-// 公開ページ(script.js)は current しか読まないため、下書き保存・いつものオーダーの
-// 保存/読み込みはサイトに一切影響しない(反映されるのは「公開する」を押した時だけ)。
-// 旧形式(draft単体)のデータが残っている場合は、読み込み時に drafts[0] へ変換する。
+// 下書きは公開JSONのdraftsに保存する。ページ表示への反映は「公開する」時のみ。
+// 旧形式(draft単体)は読み込み時にdraftsへ変換する。
+// 廃止したキーだけを除き、未知の項目や取り消し情報も保持する。元データは変更しない。
+function withoutDefaultOrder(data) {
+  const { defaultOrder, ...remaining } = data;
+  return remaining;
+}
 function renderNextGameStatus() {
   const box = document.getElementById('nextGameStatusInfo');
   const data = states.nextGame && states.nextGame.data;
@@ -1216,20 +1208,8 @@ function renderNextGameStatus() {
     : '未設定';
   const draftCount = (data.drafts || []).length;
   let html = `<p class="admin-note" style="margin:0 0 0.4rem;">🌐 現在サイトに公開中: <strong>${curLabel}</strong></p>`;
-  html += `<p class="admin-note" style="margin:0;">📝 保存済みの下書き: ${draftCount}件${data.defaultOrder ? '・いつものオーダー登録済み' : '・いつものオーダー未登録'}</p>`;
+  html += `<p class="admin-note" style="margin:0;">📝 保存済みの下書き: ${draftCount}件</p>`;
   box.innerHTML = html;
-}
-
-function renderDefaultOrderInfo() {
-  const box = document.getElementById('defaultOrderInfo');
-  const d = states.nextGame && states.nextGame.data && states.nextGame.data.defaultOrder;
-  if (!box) return;
-  if (!d) {
-    box.textContent = 'まだ登録されていません。';
-    return;
-  }
-  const savedLabel = d.savedAt ? new Date(d.savedAt).toLocaleString('ja-JP') : '';
-  box.textContent = `登録済み(スタメン${(d.lineup || []).length}人・保存日時: ${savedLabel})`;
 }
 
 function renderDraftList() {
@@ -1280,48 +1260,14 @@ async function loadNextGame() {
       // 旧形式(draft単体)からの移行。既存の下書きを失わないよう drafts[0] に変換する
       data.drafts = data.draft ? [{ name: '案1', ...data.draft }] : [];
     }
-    if (data.defaultOrder === undefined) data.defaultOrder = null;
     states.nextGame = { sha: json.sha, data };
     fillNextGameForm(data.current);
     renderNextGameStatus();
-    renderDefaultOrderInfo();
     renderDraftList();
     tabsLoaded.nextgame = true;
     clearStatus();
   } catch (e) {
     showStatus('err', e.message || String(e));
-  }
-}
-
-function loadDefaultOrder() {
-  const d = states.nextGame && states.nextGame.data && states.nextGame.data.defaultOrder;
-  if (!d) {
-    showStatus('err', 'いつものオーダーはまだ登録されていません。');
-    return;
-  }
-  renderLineup(d.lineup || []);
-  renderBench(d.bench || []);
-  showStatus('ok', 'いつものオーダーを読み込みました(まだ公開されていません)。');
-}
-
-async function saveDefaultOrder() {
-  const btn = document.getElementById('saveDefaultOrderBtn');
-  btn.disabled = true;
-  showStatus('loading', 'いつものオーダーを保存中...');
-  try {
-    const data = states.nextGame.data;
-    const { lineup, bench } = collectNextGameForm();
-    const defaultOrder = { lineup, bench, savedAt: new Date().toISOString() };
-    const newData = { ...data, current: data.current, drafts: data.drafts || [], defaultOrder, history: data.history || [] };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, 'いつものオーダーを更新');
-    states.nextGame = { sha: json.content.sha, data: newData };
-    renderDefaultOrderInfo();
-    renderNextGameStatus();
-    showStatus('ok', '現在の内容を「いつものオーダー」として保存しました。');
-  } catch (e) {
-    showStatus('err', e.message || String(e));
-  } finally {
-    btn.disabled = false;
   }
 }
 
@@ -1338,7 +1284,7 @@ async function saveDraft() {
     draft.name = name;
     draft.savedAt = new Date().toISOString();
     drafts.push(draft);
-    const newData = { ...data, current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...withoutDefaultOrder(data), current: data.current, drafts, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, `次戦情報の下書き「${name}」を保存`);
     states.nextGame = { sha: json.content.sha, data: newData };
     nameInput.value = '';
@@ -1358,7 +1304,7 @@ async function deleteDraft(index) {
     const data = states.nextGame.data;
     const drafts = (data.drafts || []).slice();
     drafts.splice(index, 1);
-    const newData = { ...data, current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...withoutDefaultOrder(data), current: data.current, drafts, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報の下書きを削除');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderDraftList();
@@ -1396,7 +1342,7 @@ async function saveCurrent() {
     const data = states.nextGame.data;
     if (data.current && data.current.attendance) current.attendance = data.current.attendance; // 旧形式の読み取り互換
     if (data.current && data.current.scheduleGameId) current.scheduleGameId = data.current.scheduleGameId;
-    const newData = { ...data, current, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...withoutDefaultOrder(data), current, drafts: data.drafts || [], history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を公開');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderNextGameStatus();
@@ -1493,7 +1439,7 @@ async function archiveAndClear(action, expectedGameId) {
       ? { opponent: nextGame.opponent || '', date: nextGame.date || '', startTime: normalizeTimeForInput(nextGame.time), meetTime: '', location: nextGame.location || '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() }
       : { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     if (nextGame && nextGame.id) blankCurrent.scheduleGameId = nextGame.id;
-    const newData = { ...data, current: blankCurrent, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: newHistory };
+    const newData = { ...withoutDefaultOrder(data), current: blankCurrent, drafts: data.drafts || [], history: newHistory };
     if (!confirm(`対象：${transitionLabel(data.current)}\n操作：${cancelled ? '雨天中止' : '終了'}\n切替後：${transitionLabel(blankCurrent)}`)) return;
     newData.lastTransitionUndo = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, beforeCurrent: data.current, afterCurrent: blankCurrent, beforeHistory: history, entry: newHistory[newHistory.length - 1] };
     const json = await saveTransitionVerified(newData, latest.sha, cancelled ? '雨天中止: 試合IDを履歴に保存し、次の試合をセット' : '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
@@ -1563,7 +1509,7 @@ async function undoLastTransition() {
     if (JSON.stringify(data.current) !== JSON.stringify(undo.afterCurrent)) throw new Error('切替後の次戦が編集されています。自動復元を停止しました。');
     if (JSON.stringify(data.history) !== JSON.stringify([...undo.beforeHistory, undo.entry])) throw new Error('履歴状態が変わっています。自動復元を停止しました。');
     if (!confirm(`直前の終了・中止を取り消します。\n現在の次戦：${transitionLabel(data.current)}\n→ 復元する試合：${transitionLabel(undo.beforeCurrent)}`)) return;
-    const restored = { ...data, current: undo.beforeCurrent, history: undo.beforeHistory, lastTransitionUndo: null };
+    const restored = { ...withoutDefaultOrder(data), current: undo.beforeCurrent, history: undo.beforeHistory, lastTransitionUndo: null };
     const saved = await saveTransitionVerified(restored, latest.sha, '直前の終了・中止を取り消す');
     states.nextGame = { data: restored, sha: saved.content.sha };
     fillNextGameForm(restored.current); renderNextGameStatus();
@@ -1580,8 +1526,6 @@ document.getElementById('addLineupBtn').addEventListener('click', () => {
 document.getElementById('addBenchBtn').addEventListener('click', () => {
   document.getElementById('benchRows').appendChild(makeBenchRow(''));
 });
-document.getElementById('loadDefaultOrderBtn').addEventListener('click', loadDefaultOrder);
-document.getElementById('saveDefaultOrderBtn').addEventListener('click', saveDefaultOrder);
 document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
 document.getElementById('saveBtn').addEventListener('click', saveCurrent);
 document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);

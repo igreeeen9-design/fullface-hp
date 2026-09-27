@@ -127,13 +127,12 @@ test('日付・相手の手動修正とスタメン公開でIDを維持し、参
   assert.match(publicRender(current, env.schedule), /参加予定：2人/);
 });
 
-test('下書き・いつものオーダーに参加予定や紐付けを含めず、参加選択は維持', async () => {
+test('下書きに参加予定や紐付けを含めず、参加選択は維持', async () => {
   const env = setup(); await env.run('loadAttendanceEditor()'); env.select('古賀');
-  await env.run('saveDraft()'); await env.run('saveDefaultOrder()');
-  for (const data of [env.writes[0].data.drafts.at(-1), env.writes[1].data.defaultOrder]) {
+  await env.run('saveDraft()');
+  for (const data of [env.writes[0].data.drafts.at(-1)]) {
     assert.ok(!('attendance' in data)); assert.ok(!('scheduleGameId' in data));
   }
-  env.run('loadDefaultOrder()');
   env.node('draftListArea').events.click({target:{closest:()=>({dataset:{act:'loadDraft',index:'0'}})}});
   assert.equal(env.run('collectAttendanceMembers().length'), 3);
 });
@@ -486,7 +485,7 @@ for (const type of ['current', 'history']) test(`取り消し: ${type}が変わ�
   assert.deepEqual(env.remoteNext, before);
 });
 
-test('取り消しは最新の下書き・通常オーダー・無関係な項目を保持', async () => {
+test('取り消しは最新の下書き・無関係な項目を保持し旧キーを除去', async () => {
   const env = switchingSetup();
   await env.run('archiveAndClear()');
   env.remoteNext.drafts = [{ name: '後から追加' }];
@@ -494,7 +493,7 @@ test('取り消しは最新の下書き・通常オーダー・無関係な項�
   env.remoteNext.extra = '保持';
   await env.run('undoLastTransition()');
   assert.deepEqual(env.remoteNext.drafts, [{ name: '後から追加' }]);
-  assert.equal(env.remoteNext.defaultOrder.lineup[0].name, '後から変更');
+  assert.ok(!('defaultOrder' in env.remoteNext));
   assert.equal(env.remoteNext.extra, '保持');
 });
 
@@ -635,3 +634,60 @@ test('参加予定の不正な打順は保存前に停止する', async () => {
   await env.run('saveAttendance()');
   assert.equal(env.writes.length, 0); assert.match(env.node('statusMsg').textContent, /整数か空欄/);
 });
+
+test('旧defaultOrderを含むJSONも読み込み可能で、読み込みだけでは保存しない', async () => {
+  const env = setup();
+  env.original.defaultOrder = { lineup: [{ name: '旧テンプレート' }] };
+  await env.run('loadNextGame()');
+  assert.deepEqual(clone(env.run('states.nextGame.data')), env.original);
+  assert.equal(env.writes.length, 0);
+  assert.doesNotMatch(env.node('nextGameStatusInfo').innerHTML, /いつものオーダー/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'admin.html'), 'utf8'), /id="(?:loadDefaultOrderBtn|saveDefaultOrderBtn|defaultOrderInfo)"/);
+});
+
+test('保存用コピーはdefaultOrderだけを除外し下書き・履歴・取り消し情報・未知の項目を保持', () => {
+  const env = setup();
+  const data = { ...env.original, defaultOrder: { lineup: [] }, lastTransitionUndo: { id: 'undo', beforeCurrent: { note: '復元用' } }, extra: { keep: true } };
+  const before = clone(data);
+  env.ctx.legacyData = data;
+  const saved = clone(env.run('withoutDefaultOrder(legacyData)'));
+  const expected = clone(before); delete expected.defaultOrder;
+  assert.deepEqual(saved, expected);
+  assert.deepEqual(data, before);
+});
+
+for (const operation of ['saveDraft()', 'deleteDraft(0)', 'saveCurrent()']) {
+  test(`${operation}: 旧キーを再保存せず他の保存済み情報を保持`, async () => {
+    const env = setup();
+    env.run('states.nextGame.data.defaultOrder = { lineup: [] }; states.nextGame.data.lastTransitionUndo = { id: "undo" }; states.nextGame.data.extra = { keep: true };');
+    const before = clone(env.run('states.nextGame.data'));
+    await env.run(operation);
+    assert.equal(env.writes.length, 1);
+    const saved = env.writes[0].data;
+    assert.ok(!('defaultOrder' in saved));
+    assert.deepEqual(saved.history, before.history);
+    assert.deepEqual(saved.lastTransitionUndo, before.lastTransitionUndo);
+    assert.deepEqual(saved.extra, before.extra);
+    if (operation === 'saveCurrent()') assert.deepEqual(saved.drafts, before.drafts);
+    else assert.deepEqual(saved.current, before.current);
+    assert.ok(!('defaultOrder' in env.run('states.nextGame.data')));
+  });
+}
+
+for (const action of ['', 'cancelled']) {
+  test(`終了・中止(${action || '終了'}): 最新JSONの旧キーを除去し下書きと追加項目を保持`, async () => {
+    const env = switchingSetup();
+    env.remoteNext.defaultOrder = { lineup: [] };
+    env.remoteNext.extra = { keep: true };
+    const drafts = clone(env.remoteNext.drafts);
+    await env.run(`archiveAndClear('${action}')`);
+    assert.equal(env.writes.length, 1);
+    assert.ok(!('defaultOrder' in env.remoteNext));
+    assert.deepEqual(env.remoteNext.drafts, drafts);
+    assert.deepEqual(env.remoteNext.extra, { keep: true });
+    assert.ok(env.remoteNext.lastTransitionUndo);
+    await env.run('undoLastTransition()');
+    assert.equal(env.writes.length, 2);
+    assert.ok(!('defaultOrder' in env.remoteNext));
+  });
+}
