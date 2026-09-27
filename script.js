@@ -336,10 +336,8 @@ function renderGameDetail(detail) {
 }
 
 /* ---- 記録データ(試合の元CSVをそのまま表示) ----
-   admin.htmlのCSV取り込みで data/raw-games/{date}.csv に保存された生データを、
-   加工・再集計せずそのままの値・項目で表として見せるための機能。
-   results.json側に新しいフィールドを追加せず、既存の game.date から
-   ファイルパスを直接組み立てることで重複データを作らないようにしている。 */
+   rawCsvPathを優先し、IDのない旧形式だけ日付から参照先を補完する。
+   元CSVは加工・再集計せず、そのままの値・項目で表示する。 */
 
 // admin.htmlのparseCsvTextと同じ簡易CSVパーサ(ダブルクォート内の改行・カンマ・""に対応)
 function parseCsvText(text) {
@@ -395,7 +393,8 @@ function renderRawCsvTable(rows) {
 }
 
 function renderRawDataBlock(game) {
-  const src = `data/raw-games/${game.date}.csv`;
+  const src = game.rawCsvPath || (!game.gameId && /^\d{4}-\d{2}-\d{2}$/.test(game.date || '') ? `data/raw-games/${game.date}.csv` : null);
+  if (!src) return '';
   return `
                 <div class="raw-data-block">
                   <button class="raw-data-toggle" type="button" data-raw-src="${escapeHtml(src)}">記録データ<span class="detail-toggle-suffix">を見る</span></button>

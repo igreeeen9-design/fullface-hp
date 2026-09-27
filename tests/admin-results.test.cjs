@@ -368,3 +368,58 @@ for (const importFirst of [false, true]) {
     assert.equal(env.writes.filter((w) => w.name === 'data/stats.json').length, importFirst ? 2 : 1);
   });
 }
+
+test('試合識別情報: rawCsvPathを優先し、日付訂正後も同じ元CSVで補完する', async () => {
+  const env = setup();
+  const results = readJson('results.json');
+  const game = results.groups.find(g => g.era === 'current').games.find(g => g.date === '2026-03-01');
+  game.gameId = '2026-03-01-01';
+  game.rawCsvPath = 'data/raw-games/2026-03-01.csv';
+  game.date = '2026-03-02';
+  delete game.boxscore;
+  const reads = [];
+  const originalGet = env.context.ghGet;
+  env.context.ghGet = async name => { reads.push(name); return originalGet(name); };
+  await env.functions.prepareResultBoxscores({ groups: [{ era: 'current', games: [game] }] });
+  assert.deepEqual(reads, [game.rawCsvPath]);
+  env.context.identityGame = game;
+  assert.ok(env.run('resultBoxscores.get(identityGame).rows.length > 0'));
+});
+
+test('試合識別情報: ID付きで参照先がない場合は同日旧CSVを流用しない', async () => {
+  const env = setup();
+  env.context.ghGet = async () => { throw new Error('別試合の元CSVを読んではいけない'); };
+  await env.functions.prepareResultBoxscores({ groups: [{ era: 'current', games: [{ gameId: '2026-03-01-02', date: '2026-03-01' }] }] });
+});
+
+test('試合識別情報: 通常編集・再保存・日付訂正でもgameIdとrawCsvPathを保持する', async () => {
+  const env = setup();
+  const game = env.files.get('data/results.json').groups[0].games.find(g => g.date === '2026-03-01');
+  game.gameId = '2026-03-01-01'; game.rawCsvPath = 'data/raw-games/2026-03-01.csv';
+  env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {};');
+  await env.functions.loadResults();
+  bindResultsForm(env, game.date);
+  const rows = env.context.document.querySelectorAll();
+  const row = rows.find(r => r._originalGame.gameId === game.gameId);
+  const query = row.querySelector;
+  row.querySelector = selector => selector === '.res-date' ? { value: '2026-03-02' } : query(selector);
+  const beforeStats = clone(env.files.get('data/stats.json'));
+  await env.functions.saveResults();
+  await env.functions.saveResults();
+  assert.notEqual(env.element('statusMsg').className, 'err');
+  const saved = env.files.get('data/results.json').groups[0].games.find(g => g.gameId === game.gameId);
+  assert.equal(saved.rawCsvPath, game.rawCsvPath);
+  assert.equal(saved.date, '2026-03-02');
+  assert.deepEqual(env.files.get('data/stats.json'), beforeStats);
+});
+
+test('公開元CSVリンク: 指定パス優先・旧形式互換・ID付き欠落時の誤参照防止', () => {
+  const source = fs.readFileSync(path.join(root, 'script.js'), 'utf8');
+  const context = vm.createContext({});
+  vm.runInContext(source.slice(source.indexOf('function escapeHtml('), source.indexOf('function formatGameDate(')), context);
+  vm.runInContext(source.slice(source.indexOf('function renderRawDataBlock('), source.indexOf("document.addEventListener('click', async (event) =>", source.indexOf('function renderRawDataBlock('))), context);
+  assert.match(context.renderRawDataBlock({date:'2026-03-02',gameId:'game-1',rawCsvPath:'data/raw-games/2026-03-01.csv'}), /data-raw-src="data\/raw-games\/2026-03-01.csv"/);
+  assert.match(context.renderRawDataBlock({date:'2026-03-01'}), /data-raw-src="data\/raw-games\/2026-03-01.csv"/);
+  assert.equal(context.renderRawDataBlock({date:'2026-03-01',gameId:'game-2'}), '');
+  assert.equal(context.renderRawDataBlock({date:null}), '');
+});

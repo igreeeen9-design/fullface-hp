@@ -1965,6 +1965,9 @@ function collectCurrentGroupGames() {
       venue: row.querySelector('.res-venue').value.trim(),
       detail: original.detail || null,
     };
+    // 通常編集・日付訂正でも、試合IDと元CSVの参照先は変えない。
+    if (Object.prototype.hasOwnProperty.call(original, 'gameId')) game.gameId = original.gameId;
+    if (Object.prototype.hasOwnProperty.call(original, 'rawCsvPath')) game.rawCsvPath = original.rawCsvPath;
     // boxscoreは2026年度以降の試合にのみ存在しうるフィールド。過去データ(2023〜2025年度)の
     // 試合オブジェクトに不要な `boxscore: null` を追加してしまわないよう、値がある場合だけ設定する。
     const source = resultBoxscores.get(original) || original.boxscore || null;
@@ -2043,10 +2046,12 @@ async function prepareResultBoxscores(data) {
   const games = (data.groups || []).filter((g) => g.era === 'current').flatMap((g) => g.games);
   await Promise.all(games.map(async (game) => {
     let boxscore = game.boxscore || null;
-    if ((!boxscore || !boxscore.headers.includes('盗塁')) && /^\d{4}-\d{2}-\d{2}$/.test(game.date || '')) {
+    // 日付からの補完はIDのない旧形式だけ。ID付きの別試合へ旧CSVを流用しない。
+    const rawCsvPath = game.rawCsvPath || (!game.gameId && /^\d{4}-\d{2}-\d{2}$/.test(game.date || '') ? `data/raw-games/${game.date}.csv` : null);
+    if ((!boxscore || !boxscore.headers.includes('盗塁')) && rawCsvPath) {
       let csv = null;
       try {
-        const json = await ghGet(`data/raw-games/${game.date}.csv`);
+        const json = await ghGet(rawCsvPath);
         csv = base64ToUtf8(json.content);
       } catch (e) {
         // 手入力した試合には元CSVがない。通信・認証エラーは欠落とみなさない。
