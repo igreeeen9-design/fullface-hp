@@ -751,3 +751,68 @@ test('旧CSVのゼロ打席行を実参加者から外すとGPだけ0、参加�
   assert.equal(totals(game).get('ベンチ参加').gp,1);
   assert.equal(totals(game).get('ベンチ参加').pa,0);
 });
+
+test('差分UI: 道下の盗塁0→1を先頭に表示し丸山との同数化は補足のみにする', () => {
+  const {context:c} = setup();
+  const oldCsv = fs.readFileSync(path.join(fixtures,'raw-games/2026-09-13.csv'),'utf8');
+  const newCsv = oldCsv.replace('一失', '"一失\n盗塁１"');
+  const before = c.buildGameImportFromCsv(oldCsv).game, after = c.buildGameImportFromCsv(newCsv).game;
+  const oldStats = {seasonRanking:{categories:[{label:'盗塁',entries:[{name:'丸山',value:'1'}]}]}};
+  const newStats = {seasonRanking:{categories:[{label:'盗塁',entries:[{name:'道下・丸山',value:'1'}]}]}};
+  const original = JSON.stringify([before,after,oldStats,newStats]);
+  const html = c.renderCsvReplacementDiff(before,after,oldCsv,newCsv,oldStats,newStats);
+  const main = html.split('</section>')[0];
+  assert.match(main, /道下　盗塁<\/td><td>0<\/td><td>1/);
+  assert.match(main, /道下　第2打席の記録/);
+  assert.doesNotMatch(main, /丸山|大淵|ランキング|球場|対戦相手|スコア/);
+  assert.match(html, /<details class="admin-note"><summary>ランキングへの影響（補足）/);
+  assert.match(html, /道下：盗塁ランキングに追加（1盗塁）/);
+  assert.doesNotMatch(html, /丸山/);
+  assert.doesNotMatch(html, /<details[^>]*\bopen\b/);
+  assert.equal(JSON.stringify([before,after,oldStats,newStats]),original);
+});
+
+test('差分UI: 一ゴロ→二ゴロの数値に出ない訂正も選手と打席を明記', () => {
+  const {context:c}=setup();
+  const oldCsv=fs.readFileSync(path.join(fixtures,'raw-games/2026-09-13.csv'),'utf8');
+  const newCsv=oldCsv.replace('一ゴロ','二ゴロ');
+  const stats=read('stats.json');
+  const html=c.renderCsvReplacementDiff(c.buildGameImportFromCsv(oldCsv).game,c.buildGameImportFromCsv(newCsv).game,oldCsv,newCsv,stats,stats);
+  const main=html.split('</section>')[0];
+  assert.match(main,/藤岡　第1打席の記録<\/td><td>一ゴロ<\/td><td>二ゴロ/);
+  assert.doesNotMatch(main,/道下|大淵|打数|安打/);
+  assert.doesNotMatch(html,/ランキングへの影響/);
+});
+
+test('差分UI: ランキング配列の並び替えや同数表記の順番だけでは差分を作らない', () => {
+  const {context:c}=setup();
+  const csv=fs.readFileSync(path.join(fixtures,'raw-games/2026-09-13.csv'),'utf8');
+  const game=c.buildGameImportFromCsv(csv).game;
+  const old={seasonRanking:{categories:[{label:'盗塁',entries:[{name:'丸山・道下',value:'1'}]}]}};
+  const after={seasonRanking:{categories:[{label:'盗塁',entries:[{name:'道下・丸山',value:'1'}]}]}};
+  const html=c.renderCsvReplacementDiff(game,game,csv,csv,old,after);
+  assert.doesNotMatch(html,/<tr>|ランキングへの影響|丸山/);
+});
+
+test('差分UI: 選手追加・削除は名前で表示し、無関係な選手の配列位置を差分にしない', () => {
+  const {context:c}=setup();
+  const csv=fs.readFileSync(path.join(fixtures,'raw-games/2026-09-13.csv'),'utf8');
+  const afterCsv=csv.replace('藤岡','新選手');
+  const stats=read('stats.json');
+  const html=c.renderCsvReplacementDiff(c.buildGameImportFromCsv(csv).game,c.buildGameImportFromCsv(afterCsv).game,csv,afterCsv,stats,stats);
+  const main=html.split('</section>')[0];
+  assert.match(main,/藤岡<\/td><td>登録あり<\/td><td>削除/);
+  assert.match(main,/新選手<\/td><td>（なし）<\/td><td>登録あり/);
+  assert.doesNotMatch(main,/古賀|道下/);
+});
+
+test('差し替え確認の先頭は直接差分で、全選手の未変更成績表を出さずHTMLをエスケープ', () => {
+  const {context:c,imp}=setup();
+  const stats=read('stats.json');
+  const before=clone(imp.game),after=clone(imp.game); after.venue='<img src=x onerror=alert(1)>';
+  const diff=c.renderCsvReplacementDiff(before,after,imp.csvText,imp.csvText,stats,stats);
+  const html=c.renderCsvPreviewHtml({...imp,mode:'replace',targetGameId:'test',diffHtml:diff});
+  assert.ok(html.startsWith('<section class="csv-direct-changes">'));
+  assert.match(html,/&lt;img/); assert.doesNotMatch(html,/<img|更新前打率/);
+  assert.match(html,/id="csvCommitBtn"/);
+});
