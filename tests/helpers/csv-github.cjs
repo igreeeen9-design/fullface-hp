@@ -25,7 +25,7 @@ module.exports = function installCsvGitHub(context, files, writes = []) {
       assert.equal(query, `ref=${mock.head}`);
       const source = mock.head === 'base' ? baseFiles : files;
       if (!source.has(name)) return missing();
-      return ok({ sha: name + ':sha', content: Buffer.from(JSON.stringify(source.get(name))).toString('base64') });
+      return ok({ sha: name + ':sha', content: Buffer.from((typeof source.get(name) === 'string' ? source.get(name) : JSON.stringify(source.get(name)))).toString('base64') });
     }
     if (route.startsWith('git/commits/')) return ok({ tree: { sha: 'base-tree' } });
     if (route === 'git/blobs') {

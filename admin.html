@@ -718,6 +718,15 @@
         反映前に必ず内容を確認できます。盗塁の通算数・TOP5も自動更新されます。投手の勝敗はここでは自動反映されません。
       </p>
       <div class="field">
+        <label for="csvImportMode">取り込み方法</label>
+        <select id="csvImportMode"><option value="new">新規登録</option><option value="replace">既存試合の差し替え</option></select>
+      </div>
+      <div class="field" id="csvReplacementField" hidden>
+        <label for="csvReplacementGame">差し替える試合（gameIdで指定）</label>
+        <select id="csvReplacementGame"></select>
+        <p class="admin-note">選択した試合だけを修正版CSVで差し替えます。日付・相手名から自動選択しません。</p>
+      </div>
+      <div class="field">
         <label for="csvFileInput">試合CSVファイル(1試合分)</label>
         <input type="file" id="csvFileInput" accept=".csv,text/csv">
       </div>
@@ -2141,6 +2150,7 @@ async function loadResults() {
     lastGroupIndex = 0;
     renderResultsGroupSelect();
     renderResultsGameList();
+    renderCsvReplacementOptions(data);
     tabsLoaded.results = true;
     clearStatus();
   } catch (e) {
@@ -2615,19 +2625,29 @@ async function saveCsvImport(imp) {
     }
     const resultsData = JSON.parse(base64ToUtf8(snapshot.results.content));
     const statsData = JSON.parse(base64ToUtf8(snapshot.stats.content));
-    const game = JSON.parse(JSON.stringify(imp.game));
-    mergeGameIntoResults(resultsData, game, imp.group);
-    applyBattingStatsToPlayers(statsData.seasonRanking.players, imp.playerStats);
-    recomputeSeasonCategories(statsData.seasonRanking);
-
-    const rawPath = `data/raw-games/${game.date}.csv`;
-    let existingRaw;
-    try {
-      existingRaw = await csvGitRequest(`contents/${rawPath}?ref=${snapshot.head}`);
-    } catch (error) {
-      if (error.status !== 404) throw error;
+    let game = JSON.parse(JSON.stringify(imp.game));
+    let rawPath;
+    if (imp.mode === 'replace') {
+      const target = findCsvReplacement(resultsData, imp.targetGameId);
+      rawPath = target.game.rawCsvPath;
+      const raw = await csvGitRequest(`contents/${rawPath}?ref=${snapshot.head}`);
+      if (raw.sha !== imp.rawSha) throw new Error(CSV_CONFLICT);
+      const replacement = prepareCsvReplacement(resultsData, statsData, imp, base64ToUtf8(raw.content));
+      if (!replacement.changed) return { unchanged: true };
+      game = replacement.game;
+    } else {
+      mergeGameIntoResults(resultsData, game, imp.group);
+      applyBattingStatsToPlayers(statsData.seasonRanking.players, imp.playerStats);
+      recomputeSeasonCategories(statsData.seasonRanking);
+      rawPath = `data/raw-games/${game.date}.csv`;
+      let existingRaw;
+      try {
+        existingRaw = await csvGitRequest(`contents/${rawPath}?ref=${snapshot.head}`);
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+      if (existingRaw) throw new Error('同じ日付の元CSVが既に存在します。上書きせず停止しました。');
     }
-    if (existingRaw) throw new Error('同じ日付の元CSVが既に存在します。上書きせず停止しました。');
 
     const contents = [
       { path: FILES.results, content: JSON.stringify(resultsData, null, 2) },
@@ -2650,7 +2670,70 @@ async function saveCsvImport(imp) {
   await publishCsvCommit(imp.attempt);
 }
 
+// 曖昧なIDや共有されたCSV参照先は書き換えず停止する。
+function findCsvReplacement(data, gameId) {
+  const all = (data.groups || []).flatMap(group => group.games.map(game => ({ group, game })));
+  const matches = all.filter(x => gameId && x.game.gameId === gameId);
+  if (matches.length !== 1 || matches[0].group.era !== 'current') throw new Error('差し替え対象のgameIdを一意に特定できません。');
+  const target = matches[0];
+  const path = target.game.rawCsvPath;
+  if (!/^data\/raw-games\/[A-Za-z0-9_-]+\.csv$/.test(path || '') ||
+      all.some(x => x.game !== target.game && (x.game.rawCsvPath || `data/raw-games/${x.game.date}.csv`) === path)) {
+    throw new Error('元CSVの参照先が不明、または他試合と共有されています。保存を中止しました。');
+  }
+  return target;
+}
+
+function prepareCsvReplacement(resultsData, statsData, imp, oldCsv) {
+  const { group, game: oldGame } = findCsvReplacement(resultsData, imp.targetGameId);
+  const beforeGame = JSON.parse(JSON.stringify(oldGame));
+  const imported = buildGameImportFromCsv(oldCsv, oldGame.date);
+  if (!beforeGame.boxscore) beforeGame.boxscore = imported.game.boxscore;
+  else if (!beforeGame.boxscore.headers.includes('盗塁')) {
+    const box = beforeGame.boxscore;
+    const names = box.headers.indexOf('選手名');
+    const steals = new Map(imported.playerStats.map(p => [normalizeResultPlayerName(p.name), p.sb]));
+    box.rows = box.rows.map(row => [...row, String(steals.get(normalizeResultPlayerName(row[names])) || 0)]);
+    box.headers.push('盗塁');
+  }
+  const game = { ...oldGame, ...JSON.parse(JSON.stringify(imp.game)), gameId: oldGame.gameId, rawCsvPath: oldGame.rawCsvPath };
+  const batting = game => totalResultBatting({ groups: [{ era: 'current', games: [game] }] });
+  const beforeStats = JSON.stringify(statsData);
+  applyResultBattingDelta(statsData, batting(beforeGame), batting(game));
+  const changed = JSON.stringify(oldGame) !== JSON.stringify(game) || oldCsv !== imp.csvText || beforeStats !== JSON.stringify(statsData);
+  if (changed) {
+    group.games[group.games.indexOf(oldGame)] = game;
+    group.record = computeRecord(group.games);
+    resultsData.leagueTotal = recomputeTotal(resultsData.leagueTotal, resultsData.groups.filter(g => g.era === 'current'));
+  }
+  return { game, changed };
+}
+
+function renderCsvReplacementOptions(data) {
+  document.getElementById('csvReplacementGame').innerHTML = '<option value="">試合を選択してください</option>' +
+    (data.groups || []).filter(g => g.era === 'current').flatMap(g => g.games).filter(g => g.gameId && g.rawCsvPath)
+      .map(g => `<option value="${escapeAttr(g.gameId)}">${escapeAttr(g.gameId)} ｜ ${escapeAttr(g.date)} ${escapeAttr(g.opponent)}</option>`).join('');
+}
+
+// 全フィールドを比較するので、数値が同じ打席訂正や削除された選手も確認できる。
+function renderCsvChanges(before, after, prefix = '') {
+  if (JSON.stringify(before) === JSON.stringify(after)) return '';
+  if (before && after && typeof before === 'object' && typeof after === 'object') {
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .map(key => renderCsvChanges(before[key], after[key], prefix ? `${prefix} / ${key}` : key)).join('');
+  }
+  const display = value => value === undefined ? '（なし）' : JSON.stringify(value);
+  return `<tr><td>${escapeAttr(prefix)}</td><td>${escapeAttr(display(before))}</td><td>${escapeAttr(display(after))}</td></tr>`;
+}
+
 let pendingCsvImport = null;
+for (const id of ['csvImportMode', 'csvReplacementGame', 'csvFileInput']) {
+  document.getElementById(id).addEventListener('change', () => {
+    pendingCsvImport = null;
+    document.getElementById('csvPreviewArea').innerHTML = '';
+    document.getElementById('csvReplacementField').hidden = document.getElementById('csvImportMode').value !== 'replace';
+  });
+}
 
 function renderCsvPreviewHtml(imp) {
   const { game, playerStats, groupLabel, statsData } = imp;
@@ -2684,7 +2767,8 @@ function renderCsvPreviewHtml(imp) {
       </table>
     </div>
     ${newPlayerNote}
-    <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">この内容でresults.json・stats.jsonを更新する</button>
+    ${imp.diffHtml || ''}
+    <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">${imp.mode === 'replace' ? '選択した試合を修正版CSVで差し替える' : 'この内容で新規登録する'}</button>
     <p class="admin-note" id="csvCommitNote" style="margin-top:0.5rem;"></p>
   `;
 }
@@ -2702,12 +2786,14 @@ document.getElementById('csvParseBtn').addEventListener('click', async () => {
     const csvText = await file.text();
     const built = buildGameImportFromCsv(csvText);
 
-    const { results: resultsJson, stats: statsJson } = await readCsvSnapshot();
+    const { head, results: resultsJson, stats: statsJson } = await readCsvSnapshot();
     const resultsData = JSON.parse(base64ToUtf8(resultsJson.content));
     const statsData = JSON.parse(base64ToUtf8(statsJson.content));
 
     pendingCsvImport = {
       csvText,
+      mode: document.getElementById('csvImportMode').value,
+      targetGameId: document.getElementById('csvReplacementGame').value,
       game: built.game,
       group: built.group,
       groupLabel: built.groupLabel,
@@ -2716,6 +2802,25 @@ document.getElementById('csvParseBtn').addEventListener('click', async () => {
       resultsData, resultsSha: resultsJson.sha,
       statsData, statsSha: statsJson.sha,
     };
+    if (pendingCsvImport.mode === 'replace') {
+      const target = findCsvReplacement(resultsData, pendingCsvImport.targetGameId);
+      const raw = await csvGitRequest(`contents/${target.game.rawCsvPath}?ref=${head}`);
+      pendingCsvImport.rawSha = raw.sha;
+      const nextResults = JSON.parse(JSON.stringify(resultsData));
+      const nextStats = JSON.parse(JSON.stringify(statsData));
+      const oldCsv = base64ToUtf8(raw.content);
+      const replacement = prepareCsvReplacement(nextResults, nextStats, pendingCsvImport, oldCsv);
+      pendingCsvImport.diffHtml = `<p>差し替え対象: ${escapeAttr(target.game.gameId)}（大会区分は保持）</p><div class="csv-preview-table-wrap"><table class="csv-preview-table"><thead><tr><th>変更項目（配列番号は0始まり）</th><th>修正前</th><th>修正後</th></tr></thead><tbody>` +
+        renderCsvChanges(target.game, replacement.game, '試合') +
+        renderCsvChanges(statsData.seasonRanking.players, nextStats.seasonRanking.players, '通算成績') +
+        renderCsvChanges(statsData.seasonRanking.categories, nextStats.seasonRanking.categories, 'ランキング') +
+        renderCsvChanges(parseCsvText(oldCsv), parseCsvText(csvText), '元CSV（行 / 列）') + '</tbody></table></div>';
+      if (!replacement.changed) {
+        previewArea.innerHTML = '<p class="admin-note">変更なし：登録済みの内容と一致しています。</p>';
+        pendingCsvImport = null;
+        return;
+      }
+    }
     previewArea.innerHTML = renderCsvPreviewHtml(pendingCsvImport);
     document.getElementById('csvCommitBtn').addEventListener('click', commitCsvImport);
   } catch (e) {
@@ -2729,15 +2834,16 @@ async function commitCsvImport() {
   if (btn.disabled) return;
   btn.disabled = true;
   document.getElementById('csvParseBtn').disabled = true;
+  for (const id of ['csvImportMode', 'csvReplacementGame', 'csvFileInput']) document.getElementById(id).disabled = true;
   note.textContent = '反映中...';
   try {
     const imp = pendingCsvImport;
     if (!imp) return;
-    await saveCsvImport(imp);
+    const outcome = await saveCsvImport(imp);
     tabsLoaded.results = false;
 
     note.textContent = '';
-    document.getElementById('csvPreviewArea').innerHTML = '<p class="admin-note">✅ 試合結果・個人成績・元CSVをまとめて保存しました。1分ほどでサイトに反映されます。</p>';
+    document.getElementById('csvPreviewArea').innerHTML = outcome?.unchanged ? '<p class="admin-note">変更なし：登録済みの内容と一致しています。</p>' : '<p class="admin-note">✅ 試合結果・個人成績・元CSVをまとめて保存しました。1分ほどでサイトに反映されます。</p>';
     document.getElementById('csvFileInput').value = '';
     pendingCsvImport = null;
     await loadResults();
@@ -2747,6 +2853,7 @@ async function commitCsvImport() {
   } finally {
     btn.disabled = false;
     document.getElementById('csvParseBtn').disabled = false;
+    for (const id of ['csvImportMode', 'csvReplacementGame', 'csvFileInput']) document.getElementById(id).disabled = false;
   }
 }
 

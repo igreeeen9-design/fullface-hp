@@ -13,7 +13,7 @@ const script = fs.readFileSync(path.join(root, 'admin.html'), 'utf8').match(/<sc
 function setup() {
   const elements = new Map();
   const element = (id) => {
-    if (!elements.has(id)) elements.set(id, { value: '', style: {}, addEventListener() {}, querySelectorAll: () => [] });
+    if (!elements.has(id)) elements.set(id, { value: '', style: {}, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, querySelectorAll: () => [] });
     return elements.get(id);
   };
   const context = vm.createContext({ document: { getElementById: element, querySelectorAll: () => [] },
@@ -172,4 +172,156 @@ test('保存開始時のデータ取得失敗では一時データを保持し�
   mock.failPath = '';
   await c.saveCsvImport(imp);
   assert.equal(mock.publications, 1);
+});
+
+function replacementSetup(correction = '二ゴロ') {
+  const env = setup();
+  const { context: c, files } = env;
+  const oldCsv = fs.readFileSync(path.join(fixtures, 'raw-games/2026-09-13.csv'), 'utf8');
+  const original = c.buildGameImportFromCsv(oldCsv);
+  const results = read('results.json');
+  const group = results.groups.find(g => g.games.some(x => x.date === '2026-09-13'));
+  const index = group.games.findIndex(x => x.date === '2026-09-13');
+  group.games[index] = { ...clone(original.game), gameId: 'explicit-target', rawCsvPath: 'data/raw-games/original.csv' };
+  files.set('data/results.json', results);
+  files.set('data/raw-games/original.csv', oldCsv);
+  const csvText = oldCsv.replace('一ゴロ', correction);
+  const imp = { ...c.buildGameImportFromCsv(csvText), csvText, mode: 'replace', targetGameId: 'explicit-target',
+    resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha', rawSha: 'data/raw-games/original.csv:sha' };
+  return { ...env, imp, mock: installGitHub(c, files), beforeResults: clone(results), beforeStats: clone(files.get('data/stats.json')) };
+}
+
+test('差し替え: 一ゴロ→二ゴロは元CSVのみ訂正し、通算成績・ランキング・他試合を保持', async () => {
+  const { context: c, imp, files, beforeResults, beforeStats } = replacementSetup();
+  await c.saveCsvImport(imp);
+  assert.deepEqual(files.get('data/results.json'), beforeResults);
+  assert.deepEqual(files.get('data/stats.json'), beforeStats);
+  assert.equal(files.get('data/raw-games/original.csv'), imp.csvText);
+});
+
+test('差し替え: 凡打→二塁打＋打点1は対象選手の差分と率・ランキングだけ反映、再適用は変更なし', async () => {
+  const { context: c, imp, files, beforeResults, beforeStats, mock } = replacementSetup('"左２安\n打点１"');
+  await c.saveCsvImport(imp);
+  const stats = files.get('data/stats.json');
+  const before = beforeStats.seasonRanking.players.find(p => p.name === '藤岡');
+  const after = stats.seasonRanking.players.find(p => p.name === '藤岡');
+  const expected = { ...before, h: before.h + 1, b2: before.b2 + 1, rbi: before.rbi + 1 };
+  c.updateBattingRates(expected);
+  assert.deepEqual(after, expected);
+  assert.notEqual(after.avg, before.avg);
+  assert.notDeepEqual(stats.seasonRanking.categories, beforeStats.seasonRanking.categories);
+  assert.deepEqual(stats.seasonRanking.players.filter(p => p.name !== '藤岡'), beforeStats.seasonRanking.players.filter(p => p.name !== '藤岡'));
+  const otherGames = data => data.groups.flatMap(g => g.games).filter(g => g.gameId !== 'explicit-target');
+  assert.deepEqual(otherGames(files.get('data/results.json')), otherGames(beforeResults));
+  const target = c.findCsvReplacement(files.get('data/results.json'), 'explicit-target').game;
+  assert.equal(target.rawCsvPath, 'data/raw-games/original.csv');
+  assert.equal(files.get(target.rawCsvPath), imp.csvText);
+  const saved = clone(stats);
+  const outcome = await c.saveCsvImport({ ...imp, attempt: undefined });
+  assert.equal(outcome.unchanged, true);
+  assert.equal(mock.publications, 1);
+  assert.deepEqual(files.get('data/stats.json'), saved);
+});
+
+for (const failBlob of [1, 2, 3]) test(`差し替え: blob ${failBlob}失敗時は3ファイル・入力不変で再試行可能`, async () => {
+  const { context: c, imp, files, mock } = replacementSetup();
+  const before = clone([...files]);
+  const input = clone(imp);
+  mock.failBlob = failBlob;
+  await assert.rejects(c.saveCsvImport(imp), /blob failure/);
+  assert.deepEqual(clone([...files]), before);
+  assert.deepEqual(clone(imp), input);
+  mock.failBlob = 0;
+  await c.saveCsvImport(imp);
+  assert.equal(mock.publications, 1);
+});
+
+test('差し替え: raw CSVのSHA競合で書き込み前に停止', async () => {
+  const { context: c, imp, mock } = replacementSetup();
+  imp.rawSha = 'stale';
+  await assert.rejects(c.saveCsvImport(imp), /他の更新/);
+  assert.ok(!mock.calls.some(x => x.method === 'POST'));
+});
+
+test('差し替え: 他端末更新は上書きしない', async () => {
+  const { context: c, imp, mock, files } = replacementSetup();
+  const before = clone([...files]);
+  mock.race = true;
+  await assert.rejects(c.saveCsvImport(imp), /他の更新/);
+  assert.deepEqual(clone([...files]), before);
+});
+
+test('差し替え: 応答消失・確認失敗から同じコミットを確認し再加算しない', async () => {
+  const { context: c, imp, mock, files } = replacementSetup('"左２安\n打点１"');
+  mock.loseResponse = true;
+  mock.failChecks = true;
+  await assert.rejects(c.saveCsvImport(imp), /保存結果を確認できません/);
+  const saved = clone([...files]);
+  mock.failChecks = false;
+  await c.saveCsvImport(imp);
+  assert.deepEqual(clone([...files]), saved);
+  assert.equal(mock.publications, 1);
+});
+
+test('差し替え: ID不明・重複・共有パスは停止し日付から推測しない', () => {
+  const { context: c, beforeResults } = replacementSetup();
+  assert.throws(() => c.findCsvReplacement(beforeResults, 'missing'), /gameId/);
+  const target = c.findCsvReplacement(beforeResults, 'explicit-target');
+  target.group.games.push(clone(target.game));
+  assert.throws(() => c.findCsvReplacement(beforeResults, 'explicit-target'), /gameId/);
+  target.group.games.at(-1).gameId = 'other';
+  assert.throws(() => c.findCsvReplacement(beforeResults, 'explicit-target'), /共有/);
+});
+
+test('差分表示: 数値が同じ打席訂正も修正前後を表示しHTMLをエスケープ', () => {
+  const { context: c } = setup();
+  const html = c.renderCsvChanges(['一ゴロ', '<script>'], ['二ゴロ', '訂正'], '元CSV');
+  assert.match(html, /一ゴロ/);
+  assert.match(html, /二ゴロ/);
+  assert.match(html, /&lt;script&gt;/);
+});
+
+test('差し替え: 旧形式のboxscoreなし・盗塁列なしも元CSVで補完し再加算しない', () => {
+  for (const missingBox of [true, false]) {
+    const { context: c, imp, beforeResults, beforeStats, files } = replacementSetup();
+    const target = c.findCsvReplacement(beforeResults, imp.targetGameId).game;
+    if (missingBox) delete target.boxscore;
+    else {
+      const index = target.boxscore.headers.indexOf('盗塁');
+      target.boxscore.headers.splice(index, 1);
+      target.boxscore.rows.forEach(row => row.splice(index, 1));
+    }
+    const original = clone(beforeStats);
+    c.prepareCsvReplacement(beforeResults, beforeStats, imp, files.get('data/raw-games/original.csv'));
+    assert.deepEqual(beforeStats, original);
+  }
+});
+
+test('差し替え: 修正前は古いCSVではなく手動編集済みboxscoreの数値を使う', () => {
+  const { context: c, imp, beforeResults, beforeStats, files } = replacementSetup();
+  const box = c.findCsvReplacement(beforeResults, imp.targetGameId).game.boxscore;
+  const row = box.rows.find(row => row[box.headers.indexOf('選手名')] === '藤岡');
+  row[box.headers.indexOf('打点')] = String(Number(row[box.headers.indexOf('打点')]) + 1);
+  beforeStats.seasonRanking.players.find(p => p.name === '藤岡').rbi += 1;
+  const expected = beforeStats.seasonRanking.players.find(p => p.name === '藤岡').rbi - 1;
+  c.prepareCsvReplacement(beforeResults, beforeStats, imp, files.get('data/raw-games/original.csv'));
+  assert.equal(beforeStats.seasonRanking.players.find(p => p.name === '藤岡').rbi, expected);
+});
+
+test('管理画面: ID選択→プレビューにセル訂正の差分→差し替え保存→再読込は変更なし', async () => {
+  const { context: c, imp, element, files } = replacementSetup();
+  element('csvImportMode').value = 'replace';
+  element('csvReplacementGame').value = imp.targetGameId;
+  element('csvFileInput').files = [{ text: async () => imp.csvText }];
+  await element('csvParseBtn').listeners.click();
+  const html = element('csvPreviewArea').innerHTML;
+  assert.match(html, /explicit-target/);
+  assert.match(html, /一ゴロ/);
+  assert.match(html, /二ゴロ/);
+  assert.match(html, /選択した試合を修正版CSVで差し替える/);
+  vm.runInContext('loadResults = async () => {};', c);
+  await element('csvCommitBtn').listeners.click();
+  assert.equal(files.get('data/raw-games/original.csv'), imp.csvText);
+  await element('csvParseBtn').listeners.click();
+  assert.match(element('csvPreviewArea').innerHTML, /変更なし/);
 });
