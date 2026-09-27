@@ -61,7 +61,44 @@
       "opponent": "Blue Bandits",
       "location": "大佐野スポーツ公園",
       "time": "15:00",
-      "id": "schedule-3"
+      "id": "schedule-3",
+      "attendance": {
+        "members": [
+          {
+            "name": "井口",
+            "number": "1"
+          },
+          {
+            "name": "森",
+            "number": "6"
+          },
+          {
+            "name": "真鍋",
+            "number": "7"
+          },
+          {
+            "name": "田中（敬）",
+            "number": "8"
+          },
+          {
+            "name": "古賀",
+            "number": "16"
+          },
+          {
+            "name": "高橋",
+            "number": "17"
+          },
+          {
+            "name": "桑原",
+            "number": "19"
+          },
+          {
+            "name": "大淵",
+            "number": "25"
+          }
+        ],
+        "updatedAt": "2026-09-27T02:56:41.902Z"
+      }
     },
     {
       "date": null,
