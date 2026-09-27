@@ -452,3 +452,203 @@ test('既存試合の識別情報と日付だけのCSV参照先は新規IDの発
   assert.equal(identity.gameId, '2026-09-13-02');
   assert.deepEqual(results, before);
 });
+
+function workflowSetup() {
+  const env = setup();
+  const { context: c, files } = env;
+  const storage = new Map();
+  c.localStorage = { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  vm.runInContext(fs.readFileSync(path.join(root, 'game-attendance.js'), 'utf8'), c);
+  c.confirm = () => true;
+  c.todayJstDateString = () => '2026-09-27';
+  files.set('data/schedule.json', { games: [
+    { id: 'today-1', date: '2026-09-27', opponent: 'Pana Spirits', time: '9:00' },
+    { id: 'today-2', date: '2026-09-27', opponent: 'Pana Spirits', time: '13:00' },
+  ] });
+  files.set('data/next-game.json', { current: { scheduleGameId: 'today-1', date: '2026-09-27', opponent: 'Pana Spirits' }, history: [] });
+  const writes = [];
+  c.ghGet = async path => ({ sha: path + ':sha', content: Buffer.from(JSON.stringify(files.get(path))).toString('base64') });
+  c.ghPut = async (path, data) => { files.set(path, clone(data)); writes.push(path); return { content: { sha: path + ':new' } }; };
+  vm.runInContext('fillNextGameForm = () => {}; renderNextGameStatus = () => {};', c);
+  return { ...env, storage, writes, mock: installGitHub(c, files), state: () => vm.runInContext('postgame', c),
+    run: code => vm.runInContext(code, c) };
+}
+async function selectWorkflow(env, id = 'today-1') {
+  await env.context.loadPostgame();
+  env.element('postgameSelect').value = id;
+  await env.context.postgameAction();
+}
+
+test('試合後5段階: 日程IDを固定してCSV保存後に同日次戦へ切替、主ボタンは1つ', async () => {
+  const env = workflowSetup();
+  const { context: c, element, files } = env;
+  await selectWorkflow(env);
+  assert.equal(env.state().step, 2);
+  assert.match(element('postgameTarget').textContent, /today-1/);
+  element('postgameFile').files = [{ text: async () => env.imp.csvText }];
+  await c.postgameAction();
+  assert.equal(env.state().step, 3);
+  assert.equal(env.state().imp.game.gameId, 'today-1');
+  assert.doesNotMatch(element('postgameFlow').innerHTML, /id="csvCommitBtn"/);
+  assert.equal((element('postgameFlow').innerHTML.match(/id="postgamePrimary"/g) || []).length, 1);
+  await c.postgameAction();
+  assert.equal(env.state().step, 4);
+  await c.postgameAction();
+  assert.equal(env.state().step, 5);
+  assert.equal(env.state().saved, true);
+  assert.equal(files.get('data/next-game.json').current.scheduleGameId, 'today-1');
+  await c.postgameAction();
+  assert.equal(files.get('data/next-game.json').current.scheduleGameId, 'today-2');
+  assert.equal(env.state().switchMessage, '切替済み');
+});
+
+test('試合後: 過去訂正・現在ID不一致では次戦操作せず、履歴済みは切替済み', () => {
+  const { context: c } = workflowSetup();
+  const next = { current: { scheduleGameId: 'current' }, history: [{ scheduleGameId: 'done' }] };
+  assert.match(c.postgameSwitchState(next, { id: 'current', past: true }), /切替は不要/);
+  assert.match(c.postgameSwitchState(next, { id: 'different' }), /切替は不要/);
+  assert.equal(c.postgameSwitchState(next, { id: 'done' }), '切替済み');
+});
+
+test('試合後: 切替直前に他端末が次戦を変更しても別試合を終了させない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  env.run("postgame.step = 5; postgame.saved = true;");
+  env.files.get('data/next-game.json').current.scheduleGameId = 'today-2';
+  await env.context.postgameAction();
+  assert.equal(env.writes.length, 0);
+  assert.match(env.state().switchMessage, /切替は不要/);
+});
+
+test('試合後: 雨天中止ではCSVを不要表示し中止と次戦を一緒に保存', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.element('postgameCancel').onclick();
+  assert.equal(env.state().step, 5);
+  assert.match(env.element('postgameFlow').innerHTML, /雨天中止のため不要/);
+  await env.context.postgameAction();
+  assert.deepEqual(env.writes, ['data/next-game.json']);
+  assert.equal(env.files.get('data/next-game.json').history[0].status, 'cancelled');
+  assert.equal(env.mock.publications, 0);
+});
+
+test('試合後: 応答消失は保存状態を確認し、ページ再開でも同じコミットを確認して二重保存しない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  await env.context.postgameAction();
+  env.mock.loseResponse = true; env.mock.failChecks = true;
+  await env.context.postgameAction();
+  assert.equal(env.state().uncertain, true);
+  assert.match(env.context.postgamePrimaryLabel(), /再確認/);
+  env.run('postgame = { step: 1 };');
+  env.mock.failChecks = false;
+  await env.context.loadPostgame();
+  assert.equal(env.state().saved, true);
+  assert.equal(env.mock.publications, 1);
+  assert.equal(env.state().step, 5);
+});
+
+test('試合後: ref更新前の失敗は未反映を確認し、保存済みコミットだけを再試行', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  await env.context.postgameAction();
+  env.mock.failPath = 'git/refs/heads/main';
+  await env.context.postgameAction();
+  assert.equal(env.state().uncertain, true);
+  env.mock.failPath = '';
+  await env.context.postgameAction();
+  assert.equal(env.state().retryReady, true);
+  await env.context.postgameAction();
+  assert.equal(env.mock.publications, 1);
+  assert.equal(env.mock.calls.filter(call => call.route === 'git/commits').length, 1);
+});
+
+test('試合後: SHA競合時は最新データで確認画面に戻り保存しない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  await env.context.postgameAction();
+  env.state().imp.resultsSha = 'stale';
+  await env.context.postgameAction();
+  assert.equal(env.state().step, 3);
+  assert.equal(env.mock.publications, 0);
+  assert.match(env.element('postgameFlow').innerHTML, /確認し直して/);
+});
+
+test('試合後: 保存前に閉じた場合はCSV再選択へ戻り、CSV本文は端末に保存しない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  assert.ok(!env.storage.get('ffhp_postgame_v1').includes('csvText'));
+  env.run('postgame = { step: 1 };');
+  await env.context.loadPostgame();
+  assert.equal(env.state().id, 'today-1');
+  assert.equal(env.state().step, 2);
+});
+
+test('試合後: 日程なしのID生成と競合後の再確認でも日程IDに誤変換しない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env, '__new__');
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  const id = env.state().id;
+  assert.match(id, /^2026-09-27-/);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  assert.equal(env.state().id, id);
+  assert.equal(env.state().imp.scheduleId, null);
+});
+
+test('試合後: 切替保存の応答消失は再取得で切替済みと確認し二度終了しない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  env.run("postgame.step = 5; postgame.mode = 'cancelled';");
+  const put = env.context.ghPut;
+  env.context.ghPut = async (...args) => { await put(...args); throw new Error('response lost'); };
+  await env.context.postgameAction();
+  assert.equal(env.state().switchMessage, '切替済み');
+  assert.equal(env.writes.length, 1);
+  assert.equal(env.files.get('data/next-game.json').history.length, 1);
+});
+
+test('試合後: 既存試合の差し替え保存後、過去試合は次戦へ切り替えない', async () => {
+  const env = workflowSetup();
+  const original = env.context.buildGameImportFromCsv(env.imp.csvText.replace('9/27,', '9/13,'));
+  const results = env.files.get('data/results.json');
+  const group = results.groups.find(group => group.games.some(game => game.date === '2026-09-13'));
+  const index = group.games.findIndex(game => game.date === '2026-09-13');
+  group.games[index] = { ...clone(original.game), gameId: 'old-game', rawCsvPath: 'data/raw-games/old-game.csv' };
+  env.files.set('data/raw-games/old-game.csv', env.imp.csvText.replace('9/27,', '9/13,'));
+  installGitHub(env.context, env.files);
+  await selectWorkflow(env, 'old-game');
+  assert.equal(env.state().mode, 'replace');
+  await env.context.parsePostgameCsv(env.files.get('data/raw-games/old-game.csv').replace('一ゴロ', '二ゴロ'));
+  await env.context.postgameAction();
+  await env.context.postgameAction();
+  assert.match(env.state().switchMessage, /切替は不要/);
+  assert.equal(env.files.get('data/next-game.json').current.scheduleGameId, 'today-1');
+  assert.equal(env.writes.length, 0);
+});
+
+test('試合後: 日付・対戦相手が選択対象と違うCSVは明示確認まで保存へ進めない', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText.replace('Pana Spirits', '別の相手'));
+  assert.equal(env.state().identityMismatch, true);
+  assert.match(env.state().label, /Pana Spirits/);
+  await env.context.postgameAction();
+  assert.equal(env.state().step, 3);
+  assert.equal(env.mock.publications, 0);
+  env.element('postgameIdentityConfirm').checked = true;
+  await env.context.postgameAction();
+  assert.equal(env.state().step, 4);
+});
+
+test('試合後: 保存中に別試合へ切替できず、対象と再開情報を保持する', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  env.run('postgameBusy = true;');
+  env.element('postgameReset').onclick();
+  assert.equal(env.state().id, 'today-1');
+  env.run('postgameBusy = false;');
+});

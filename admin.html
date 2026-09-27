@@ -421,6 +421,20 @@
 .attendance-option input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin: 0; }
 .attendance-guest { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: end; margin-top: 1rem; }
 .attendance-guest > div { flex: 1 1 130px; min-width: 0; }
+/* 試合後は対象と現在の主操作だけを固定表示 */
+.postgame-target { position: sticky; top: 0; z-index: 10; background: var(--navy); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+.postgame-step { background: white; border: 1px solid #d5dde3; border-radius: 8px; margin: .6rem 0; padding: .8rem; }
+.postgame-step summary { font-weight: 700; cursor: pointer; }
+.postgame-step[open] { border: 2px solid var(--accent-light); }
+.postgame-step p { overflow-wrap: anywhere; }
+.postgame-action { position: sticky; bottom: 0; background: white; padding: .8rem 0 max(.8rem, env(safe-area-inset-bottom)); }
+.postgame-action button { width: 100%; min-height: 48px; }
+#postgameFlow select, #postgameFlow input[type=file] { width: 100%; min-height: 48px; margin-top: .7rem; }
+#postgameFlow { padding-bottom: 1rem; }
+#postgameFlow .csv-preview-table-wrap { max-width: 100%; overflow: auto; }
+#postgameFlow table { width: 100%; table-layout: fixed; font-size: .8rem; }
+#postgameFlow td { overflow-wrap: anywhere; vertical-align: top; }
+#postgameFlow .postgame-player { padding: .5rem 0; border-bottom: 1px solid #e1e6eb; }
 </style>
 </head>
 <body>
@@ -464,8 +478,10 @@
     </details>
   </section>
 
+  <p class="admin-note">試合後は「試合後の作業」から順番に進めてください。日程・参加者・スタメンなどの通常管理は各タブから行えます。</p>
   <nav class="admin-tabs" id="adminTabs">
-    <button type="button" class="admin-tab-btn active" data-tab="nextgame">次戦情報</button>
+    <button type="button" class="admin-tab-btn active" data-tab="postgame">試合後の作業</button>
+    <button type="button" class="admin-tab-btn" data-tab="nextgame">次戦情報</button>
     <button type="button" class="admin-tab-btn" data-tab="schedule">試合日程</button>
     <button type="button" class="admin-tab-btn" data-tab="results">試合結果</button>
     <button type="button" class="admin-tab-btn" data-tab="roster">選手名簿</button>
@@ -473,7 +489,11 @@
   </nav>
 
   <!-- ============ 次戦情報 ============ -->
-  <div id="tab-nextgame" class="admin-tab-panel">
+  <div id="tab-postgame" class="admin-tab-panel">
+    <div id="postgameTarget" class="postgame-target">試合を選んでください</div>
+    <div id="postgameFlow"></div>
+  </div>
+  <div id="tab-nextgame" class="admin-tab-panel" hidden>
 
     <section class="admin-card" id="noticeCard">
       <h2>サイトのお知らせ</h2>
@@ -851,6 +871,7 @@ function ensureTabLoaded(tab) {
     return;
   }
   if (!getToken() || tabsLoaded[tab]) return;
+  if (tab === 'postgame') { loadPostgame(); return; }
   if (tab === 'nextgame') {
     loadNextGame();
     // サイトのお知らせは次戦情報タブの中にあるが、次戦情報本体とは別のファイル
@@ -1372,7 +1393,7 @@ function completedScheduleIds(results, history) {
   ].filter(Boolean);
 }
 
-async function archiveAndClear(action) {
+async function archiveAndClear(action, expectedGameId) {
   const cancelled = action === 'cancelled';
   if (!confirm(cancelled
     ? '現在公開中の次戦を雨天中止として保存し、次の未終了試合へ進みます。振替は新しい日程として登録してください。よろしいですか?'
@@ -1384,10 +1405,17 @@ async function archiveAndClear(action) {
   cancelBtn.disabled = true;
   showStatus('loading', '履歴に保存中...');
   try {
-    const current = cancelled ? { ...states.nextGame.data.current } : collectNextGameForm();
+    let data = states.nextGame.data;
+    if (expectedGameId) {
+      const latest = await ghGet(FILES.nextGame);
+      data = JSON.parse(base64ToUtf8(latest.content));
+      if ((data.history || []).some(game => game.scheduleGameId === expectedGameId)) return { skipped: '切替済み' };
+      if (data.current?.scheduleGameId !== expectedGameId) return { skipped: 'この試合は現在の次戦ではないため、次戦切替は不要です' };
+      states.nextGame = { data, sha: latest.sha };
+    }
+    const current = cancelled || expectedGameId ? { ...data.current } : collectNextGameForm();
     delete current.attendance;
     current.updatedAt = new Date().toISOString();
-    const data = states.nextGame.data;
     const history = data.history || [];
     const [scheduleJson, resultsJson] = await Promise.all([ghGet(FILES.schedule), ghGet(FILES.results)]);
     const scheduleData = JSON.parse(base64ToUtf8(scheduleJson.content));
@@ -1419,7 +1447,9 @@ async function archiveAndClear(action) {
     showStatus('ok', nextGame
       ? `${cancelled ? '雨天中止として' : ''}履歴に保存し、次の試合(${nextGame.opponent})を自動セットしました。集合時間だけ入力して公開してください。`
       : `${cancelled ? '雨天中止として' : ''}履歴に保存しました。試合日程に次の試合が見つからなかったため、フォームは空のままです。`);
+    return { saved: true };
   } catch (e) {
+    if (expectedGameId) throw e;
     showStatus('err', e.message || String(e));
   } finally {
     btn.disabled = false;
@@ -2390,6 +2420,7 @@ async function saveCsvImport(imp) {
       tree: newTree.sha, parents: [snapshot.head],
     });
     imp.attempt = { baseHead: snapshot.head, commitSha: commit.sha };
+    if (imp.workflow) rememberPostgame();
   }
   await publishCsvCommit(imp.attempt);
 }
@@ -2903,6 +2934,229 @@ document.getElementById('changeGcTokenBtn').addEventListener('click', () => {
   document.getElementById('analyticsInfo').innerHTML = '';
 });
 
+/* ================== 試合後の作業 ================== */
+const POSTGAME_KEY = 'ffhp_postgame_v1';
+let postgame = { step: 1 };
+let postgameSnapshot = null;
+let postgameBusy = false;
+function rememberPostgame() {
+  // CSVや成績のコピーは端末に残さない。未保存なら再開時にファイルを選び直す。
+  const { step, id, label, mode, past, saved, switchMessage, attempt, scheduleId, switchUncertain, sourceDate, sourceOpponent } = postgame;
+  localStorage.setItem(POSTGAME_KEY, JSON.stringify({ step, id, label, mode, past, saved, switchMessage, scheduleId, switchUncertain, sourceDate, sourceOpponent,
+    attempt: postgame.imp?.attempt || attempt }));
+}
+async function readPostgame() {
+  const [snapshot, next, schedule] = await Promise.all([readCsvSnapshot(), ghGet(FILES.nextGame), ghGet(FILES.schedule)]);
+  return { ...snapshot, resultsData: JSON.parse(base64ToUtf8(snapshot.results.content)),
+    statsData: JSON.parse(base64ToUtf8(snapshot.stats.content)), next: JSON.parse(base64ToUtf8(next.content)),
+    schedule: JSON.parse(base64ToUtf8(schedule.content)) };
+}
+function postgameSwitchState(next, task = postgame) {
+  if ((next.history || []).some(game => game.scheduleGameId === task.id)) return '切替済み';
+  if (task.past || next.current?.scheduleGameId !== task.id) return 'この試合は現在の次戦ではないため、次戦切替は不要です';
+  return '';
+}
+async function loadPostgame() {
+  if (postgameBusy) return;
+  try {
+    postgameSnapshot = await readPostgame();
+    if (!postgame.id && postgame.step === 1) {
+      const saved = localStorage.getItem(POSTGAME_KEY);
+      if (saved) { postgame = JSON.parse(saved); postgame.step = postgame.saved || postgame.attempt ? 4 : (postgame.id ? 2 : 1); }
+    }
+    if (postgame.attempt || postgame.imp?.attempt) await checkPostgameSave();
+    else if (postgame.mode === 'cancelled') { postgame.step = 5; await preparePostgameSwitch(); }
+    else if (postgame.saved) {
+      // 保存済み表示だけを根拠にせず、登録済みIDを確認する。
+      const exists = postgameSnapshot.resultsData.groups.some(group => group.games.some(game => game.gameId === postgame.id));
+      if (!exists && postgame.mode !== 'cancelled') { postgame.saved = false; postgame.step = 2; }
+      else { postgame.step = 5; postgame.switchMessage = postgameSwitchState(postgameSnapshot.next); }
+    }
+    renderPostgame();
+  } catch (error) { renderPostgame(error.message); }
+}
+function postgameChoices() {
+  const resultGames = postgameSnapshot.resultsData.groups.flatMap(group => group.games).filter(game => game.gameId);
+  const choices = new Map();
+  for (const game of postgameSnapshot.schedule.games || []) if (game.id) choices.set(game.id, { ...game, registered: false });
+  for (const game of resultGames) choices.set(game.gameId, { ...choices.get(game.gameId), ...game, id: game.gameId, registered: true });
+  const today = todayJstDateString();
+  return [...choices.values()].sort((a, b) => Number(b.date === today) - Number(a.date === today) || String(b.date || '').localeCompare(String(a.date || '')) || String(a.time || '').localeCompare(String(b.time || '')));
+}
+function renderPostgame(error = '') {
+  const target = document.getElementById('postgameTarget');
+  target.textContent = postgame.label ? `操作対象：${postgame.label}` : '① 試合を選んでください';
+  const el = document.getElementById('postgameFlow');
+  if (!postgameSnapshot) { el.innerHTML = `<p>${escapeAttr(error || '接続後に試合を読み込みます。')}</p><button type="button" id="postgameReload">再確認</button>`; document.getElementById('postgameReload').onclick = loadPostgame; return; }
+  const choices = postgameChoices();
+  const select = `<label>試合（日付・開始時刻・相手を確認）<select id="postgameSelect"><option value="">選択してください</option>${choices.map(game => `<option value="${escapeAttr(game.id)}">${escapeAttr(game.date || '日付未定')} ${escapeAttr(game.time || '')} ${escapeAttr(game.opponent)} ${game.registered ? '［登録済み／訂正］' : '［未登録］'} ｜ ${escapeAttr(game.id)}</option>`).join('')}<option value="__new__">日程にない試合を新規登録</option></select></label>`;
+  const mode = postgame.mode === 'replace' ? '既存試合の差し替え' : '新規登録';
+  const canCancel = postgame.mode === 'new' && !postgame.past && postgameSnapshot.next.current?.scheduleGameId === postgame.id;
+  const steps = [
+    select,
+    `<p><strong>${mode}</strong>としてCSVを読み込みます。</p><input type="file" id="postgameFile" accept=".csv,text/csv">${canCancel ? '<p><button type="button" id="postgameCancel">この試合は雨天中止</button></p>' : ''}`,
+    postgame.preview || '<p>CSVを読み込むと確認内容が表示されます。</p>',
+    `<p>${postgame.saved ? '✓ GitHubへの保存を確認しました。公開サイトへの反映には時間がかかる場合があります。' : postgame.uncertain ? '保存状況を確認しています。新規登録し直さず、下のボタンで再確認してください。' : `${mode}：対象と確認内容を保存します。`}</p>`,
+    `<p>${escapeAttr(postgame.switchMessage || (postgame.mode === 'cancelled' ? '雨天中止を記録し、次の未終了試合へ進みます。' : 'この試合を終了履歴に保存し、次の未終了試合へ進みます。'))}</p>${postgame.nextLabel && !postgame.switchMessage ? `<p>次に表示：${escapeAttr(postgame.nextLabel)}</p>` : ''}`,
+  ];
+  const titles = ['試合を選ぶ', 'CSVを読み込む', '内容を確認', '保存', '次戦へ切り替える'];
+  el.innerHTML = (error ? `<p role="alert">${escapeAttr(error)}</p>` : '') + steps.map((body, index) => {
+    const step = index + 1;
+    const skipped = postgame.mode === 'cancelled' && step >= 2 && step <= 4;
+    const done = step < postgame.step || step === 5 && postgame.switchMessage;
+    return `<details class="postgame-step" ${step === postgame.step ? 'open' : ''}><summary>${skipped ? '－' : done ? '✓' : step} ${titles[index]}${skipped ? '（雨天中止のため不要）' : ''}</summary>${step === postgame.step ? body : `<p>${skipped ? '今回は不要です。' : done ? '完了済みです。' : '前の操作が終わると進めます。'}</p>`}</details>`;
+  }).join('') + `<div class="postgame-action"><button type="button" class="admin-btn admin-btn-primary" id="postgamePrimary">${postgamePrimaryLabel()}</button></div>` +
+    (postgame.step === 5 && postgame.switchMessage ? '<p>お知らせの更新は任意です。</p><button type="button" class="admin-btn-link" id="postgameNotice">必要ならお知らせを更新</button>' : '') +
+    '<button type="button" class="admin-btn-link" id="postgameReset">別の試合を選ぶ</button>';
+  if (postgame.step === 5 && postgame.switchMessage) document.getElementById('postgameNotice').onclick = () => document.querySelector('[data-tab="nextgame"]').click();
+  document.getElementById('postgamePrimary').onclick = postgameAction;
+  document.getElementById('postgamePrimary').disabled = postgameBusy;
+  document.getElementById('postgameReset').onclick = () => {
+    if (postgameBusy) return;
+    if (postgame.uncertain || postgame.imp?.attempt && !postgame.saved) { renderPostgame('保存状態を先に再確認してください。'); return; }
+    postgame = { step: 1 }; localStorage.removeItem(POSTGAME_KEY); loadPostgame();
+  };
+  if (postgame.step === 2 && canCancel) document.getElementById('postgameCancel').onclick = async () => {
+    if (postgameBusy) return;
+    try { postgame.mode = 'cancelled'; postgame.step = 5; await preparePostgameSwitch(); rememberPostgame(); renderPostgame(); }
+    catch (error) { renderPostgame(error.message); }
+  };
+}
+function postgamePrimaryLabel() {
+  if (postgame.switchUncertain) return '切替状況を再確認する';
+  if (postgame.uncertain) return '保存状態を再確認する';
+  if (postgame.step === 1) return 'この試合で進む';
+  if (postgame.step === 2) return 'CSVを読み込む';
+  if (postgame.step === 3) return '内容を確認しました';
+  if (postgame.step === 4) return postgame.retryReady ? '未反映の同じ保存を再試行する' : postgame.mode === 'replace' ? 'この試合を差し替えて保存' : 'この試合を新規登録';
+  return postgame.switchMessage ? '完了・別の試合へ' : postgame.mode === 'cancelled' ? '中止を記録して次戦へ' : 'この試合を終了して次戦へ';
+}
+async function preparePostgameSwitch() {
+  postgameSnapshot = await readPostgame();
+  postgame.switchMessage = postgameSwitchState(postgameSnapshot.next);
+  if (postgame.mode === 'cancelled' && postgame.switchMessage && postgame.switchMessage !== '切替済み') postgame.switchMessage += '（中止記録は保存していません）';
+  if (!postgame.switchMessage) {
+    const ids = completedScheduleIds(postgameSnapshot.resultsData, postgameSnapshot.next.history || []);
+    const next = findNextScheduledGame(postgameSnapshot.schedule, [...ids, postgame.id]);
+    postgame.nextLabel = next ? `${next.date} ${next.time || ''} ${next.opponent}` : '次戦未定（表示を空にします）';
+  }
+}
+async function checkPostgameSave() {
+  const attempt = postgame.imp?.attempt || postgame.attempt;
+  if (!attempt) return;
+  postgame.uncertain = true;
+  const ref = await csvGitRequest(`git/ref/heads/${CONFIG.branch}`);
+  const head = ref.object.sha;
+  if (head === attempt.baseHead) { postgame.uncertain = false; postgame.retryReady = true; postgame.step = 4; return; }
+  const reflected = head === attempt.commitSha || ['ahead', 'identical'].includes((await csvGitRequest(`compare/${attempt.commitSha}...${head}`)).status);
+  if (!reflected) throw new Error(CSV_CONFLICT);
+  postgame.saved = true; postgame.uncertain = false; postgame.step = 5; tabsLoaded.results = false;
+  await preparePostgameSwitch(); rememberPostgame();
+}
+async function parsePostgameCsv(csvText) {
+  const built = buildGameImportFromCsv(csvText);
+  const snapshot = await readCsvSnapshot();
+  const resultsData = JSON.parse(base64ToUtf8(snapshot.results.content));
+  const statsData = JSON.parse(base64ToUtf8(snapshot.stats.content));
+  const imp = { ...built, csvText, mode: postgame.mode, targetGameId: postgame.id,
+    resultsData, statsData, resultsSha: snapshot.results.sha, statsSha: snapshot.stats.sha, workflow: true };
+  if (postgame.mode === 'replace') {
+    const target = findCsvReplacement(resultsData, postgame.id);
+    const raw = await csvGitRequest(`contents/${target.game.rawCsvPath}?ref=${snapshot.head}`);
+    imp.rawSha = raw.sha;
+    const newResults = JSON.parse(JSON.stringify(resultsData)), newStats = JSON.parse(JSON.stringify(statsData));
+    const oldCsv = base64ToUtf8(raw.content);
+    const replacement = prepareCsvReplacement(newResults, newStats, imp, oldCsv);
+    imp.diffHtml = '<p>変更点（修正前 → 修正後）</p><div class="csv-preview-table-wrap"><table><tbody>' + renderCsvChanges(target.game, replacement.game, '試合') + renderCsvChanges(statsData.seasonRanking, newStats.seasonRanking, '通算・ランキング') + renderCsvChanges(parseCsvText(oldCsv), parseCsvText(csvText), '元CSV') + '</tbody></table></div>';
+    if (!replacement.changed) imp.diffHtml += '<p>変更なし：保存済みの内容と一致します。</p>';
+  } else {
+    await prepareNewCsvPreview(imp, snapshot.head);
+    imp.scheduleId = postgame.scheduleId || null;
+    Object.assign(imp.game, newCsvIdentity(resultsData, imp.scheduleData, built.game.date, imp.scheduleId));
+    imp.identitySelected = true;
+    if (!imp.scheduleId) postgame.id = imp.game.gameId;
+    // 日程選択はステップ1で確定。重複警告・別試合確認は既存処理を共用。
+    imp.newImportHtml = imp.newImportHtml.slice(imp.newImportHtml.indexOf('</div>') + 6);
+  }
+  postgame.imp = imp;
+  if (!postgame.scheduleId && postgame.mode === 'new') postgame.label = `${built.game.date} ${built.game.opponent} ｜ ${postgame.id} ｜ 新規登録`;
+  postgame.past = postgame.past || built.game.date < todayJstDateString();
+  const normalize = text => String(text || '').normalize('NFKC').replace(/\s/g, '').toLowerCase();
+  postgame.identityMismatch = !!postgame.sourceDate && (postgame.sourceDate !== built.game.date || normalize(postgame.sourceOpponent) !== normalize(built.game.opponent));
+  const newNames = imp.playerStats.filter(player => !imp.statsData.seasonRanking.players.some(existing => normalizeResultPlayerName(existing.name) === normalizeResultPlayerName(player.name))).map(player => player.name);
+  postgame.preview = `<p><strong>${imp.mode === 'replace' ? '既存試合の差し替え' : '新規登録'}</strong></p>
+    <p>${escapeAttr(imp.game.date)} ／ ${escapeAttr(imp.game.opponent)}<br><strong>スコア ${escapeAttr(imp.game.score)}</strong> ／ ${escapeAttr(imp.game.resultLabel)}</p>
+    ${newNames.length ? `<p role="alert">未登録の選手名があります。表記を確認してください：${newNames.map(escapeAttr).join('、')}</p>` : ''}` +
+    imp.playerStats.map(player => `<details class="postgame-player"><summary>${escapeAttr(player.name)}：安打${player.stats.H}・打点${player.rbi}</summary><p>打席${player.stats.PA} ／ 打数${player.stats.AB} ／ 二塁打${player.stats.B2} ／ 三塁打${player.stats.B3} ／ 本塁打${player.stats.HR} ／ 盗塁${player.sb}</p></details>`).join('') +
+    (imp.diffHtml || '') + (imp.newImportHtml || '').replaceAll('csvConfirmSeparate', 'postgameConfirmSeparate');
+  if (postgame.identityMismatch) postgame.preview = '<p role="alert">選択した試合とCSVの日付または相手名が異なります。</p><label><input type="checkbox" id="postgameIdentityConfirm">このCSVが選択した試合の記録であることを確認しました</label>' + postgame.preview;
+  postgame.step = 3; postgame.uncertain = false; rememberPostgame();
+}
+async function postgameAction() {
+  if (postgameBusy) return;
+  postgameBusy = true;
+  document.getElementById('postgamePrimary').disabled = true;
+  try {
+    if (postgame.switchUncertain) { await preparePostgameSwitch(); postgame.switchUncertain = false; rememberPostgame(); }
+    else if (postgame.uncertain) { await checkPostgameSave(); }
+    else if (postgame.step === 1) {
+      const id = document.getElementById('postgameSelect').value;
+      const game = postgameChoices().find(game => game.id === id);
+      if (!game && id !== '__new__') throw new Error('試合を選択してください。');
+      postgame = { step: 2, id, mode: game?.registered ? 'replace' : 'new', past: !!game?.date && game.date < todayJstDateString(),
+        scheduleId: game && !game.registered ? game.id : null, sourceDate: game?.date, sourceOpponent: game?.opponent,
+        label: game ? `${game.date || '日付未定'} ${game.time || ''} ${game.opponent} ｜ ${id}` : '日程にない試合（CSV読込後にID発行）' };
+      const switched = postgameSwitchState(postgameSnapshot.next);
+      if (postgameSnapshot.next.history?.some(game => game.scheduleGameId === id && game.status === 'cancelled')) { postgame.step = 5; postgame.switchMessage = switched; }
+      rememberPostgame();
+    } else if (postgame.step === 2) {
+      const file = document.getElementById('postgameFile').files?.[0];
+      if (!file) throw new Error('CSVファイルを選んでください。');
+      await parsePostgameCsv(await file.text());
+    } else if (postgame.step === 3) {
+      if (postgame.identityMismatch && !document.getElementById('postgameIdentityConfirm')?.checked) throw new Error('選択した試合とCSVの違いを確認してください。');
+      postgame.imp.confirmSeparate = !!document.getElementById('postgameConfirmSeparate')?.checked;
+      if (postgame.mode === 'new' && sameDateCsvGames(postgame.imp.resultsData, postgame.imp.game.date).length && !postgame.imp.confirmSeparate) throw new Error('別試合として登録する確認にチェックしてください。');
+      postgame.step = 4; rememberPostgame();
+    } else if (postgame.step === 4) {
+      if (!confirm(`${postgame.label}\n${postgame.mode === 'replace' ? 'この試合を差し替えます。' : 'この試合を新規登録します。'}`)) return;
+      if (postgame.retryReady) await publishCsvCommit(postgame.imp?.attempt || postgame.attempt);
+      else await saveCsvImport(postgame.imp);
+      postgame.saved = true; postgame.step = 5; postgame.uncertain = false; tabsLoaded.results = false;
+      rememberPostgame(); await preparePostgameSwitch();
+    } else if (postgame.switchMessage) {
+      postgame = { step: 1 }; localStorage.removeItem(POSTGAME_KEY); postgameSnapshot = await readPostgame();
+    } else {
+      await preparePostgameSwitch();
+      if (!postgame.switchMessage) {
+        states.nextGame = states.nextGame || {};
+        await archiveAndClear(postgame.mode === 'cancelled' ? 'cancelled' : undefined, postgame.id);
+        tabsLoaded.nextgame = false;
+        await preparePostgameSwitch();
+      }
+      rememberPostgame();
+    }
+  } catch (error) {
+    if (error.message.includes(CSV_CONFLICT)) {
+      if (postgame.imp) {
+        const csv = postgame.imp.csvText; delete postgame.imp.attempt; delete postgame.attempt;
+        try { await parsePostgameCsv(csv); } catch (refreshError) { postgame.step = 2; postgame.uncertain = false; renderPostgame(refreshError.message); return; }
+      }
+      else { postgame.attempt = null; postgame.step = 2; postgame.uncertain = false; }
+      renderPostgame('他の更新がありました。最新の内容を確認し直してください。');
+      return;
+    }
+    if (postgame.step === 5) {
+      postgame.switchUncertain = true;
+      try { await preparePostgameSwitch(); if (postgame.switchMessage) postgame.switchUncertain = false; } catch (_) { /* 状況不明のまま再実行しない */ }
+      rememberPostgame();
+    }
+    if (postgame.step === 4 && (postgame.imp?.attempt || postgame.attempt)) postgame.uncertain = true;
+    renderPostgame(error.message); return;
+  } finally { postgameBusy = false; const button = document.getElementById('postgamePrimary'); if (button) button.disabled = false; }
+  renderPostgame();
+}
+
 /* ================== トークン & 初期化 ================== */
 
 function refreshTokenUI() {
@@ -2916,7 +3170,7 @@ document.getElementById('saveTokenBtn').addEventListener('click', () => {
   if (!val) return;
   setToken(val);
   refreshTokenUI();
-  ensureTabLoaded('nextgame');
+  ensureTabLoaded('postgame');
 });
 
 document.getElementById('changeTokenBtn').addEventListener('click', () => {
@@ -2929,8 +3183,9 @@ document.getElementById('changeTokenBtn').addEventListener('click', () => {
 refreshTokenUI();
 refreshGcTokenUI();
 if (getToken()) {
-  ensureTabLoaded('nextgame');
+  ensureTabLoaded('postgame');
 } else {
+  renderPostgame();
   renderLineup([]);
 }
 </script>
