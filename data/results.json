@@ -10,8 +10,6 @@
       "games": [
         {
           "date": "2026-09-27",
-          "gameId": "2026-09-27-01",
-          "rawCsvPath": "data/raw-games/2026-09-27.csv",
           "dateLabel": "2026/09/27(日)",
           "opponent": "六本松ブラックソックス",
           "score": "3 - 4",
@@ -58,6 +56,8 @@
               }
             ]
           },
+          "gameId": "2026-09-27-01",
+          "rawCsvPath": "data/raw-games/2026-09-27.csv",
           "boxscore": {
             "headers": [
               "打順",
@@ -265,8 +265,6 @@
         },
         {
           "date": "2026-09-13",
-          "gameId": "2026-09-13-01",
-          "rawCsvPath": "data/raw-games/2026-09-13.csv",
           "dateLabel": "2026/09/13(日)",
           "opponent": "PanaSpirits",
           "score": "5 - 6",
@@ -312,12 +310,12 @@
                 "total": "6"
               }
             ]
-          }
+          },
+          "gameId": "2026-09-13-01",
+          "rawCsvPath": "data/raw-games/2026-09-13.csv"
         },
         {
           "date": "2026-08-30",
-          "gameId": "2026-08-30-01",
-          "rawCsvPath": "data/raw-games/2026-08-30.csv",
           "dateLabel": "2026/08/30(日)",
           "opponent": "ジャビッツ",
           "score": "0 - 11",
@@ -360,12 +358,12 @@
                 "total": "0"
               }
             ]
-          }
+          },
+          "gameId": "2026-08-30-01",
+          "rawCsvPath": "data/raw-games/2026-08-30.csv"
         },
         {
           "date": "2026-07-26",
-          "gameId": "2026-07-26-01",
-          "rawCsvPath": "data/raw-games/2026-07-26.csv",
           "dateLabel": "2026/07/26(日)",
           "opponent": "3 Color Runs",
           "score": "8 - 7",
@@ -405,12 +403,12 @@
                 "total": "8"
               }
             ]
-          }
+          },
+          "gameId": "2026-07-26-01",
+          "rawCsvPath": "data/raw-games/2026-07-26.csv"
         },
         {
           "date": "2026-07-12",
-          "gameId": "2026-07-12-01",
-          "rawCsvPath": "data/raw-games/2026-07-12.csv",
           "dateLabel": "2026/07/12(日)",
           "opponent": "Heisey",
           "score": "7 - 9",
@@ -453,12 +451,12 @@
                 "total": "7"
               }
             ]
-          }
+          },
+          "gameId": "2026-07-12-01",
+          "rawCsvPath": "data/raw-games/2026-07-12.csv"
         },
         {
           "date": "2026-05-17",
-          "gameId": "2026-05-17-01",
-          "rawCsvPath": "data/raw-games/2026-05-17.csv",
           "dateLabel": "2026/05/17(日)",
           "opponent": "福岡オーシャンズ",
           "score": "0 - 6",
@@ -501,12 +499,12 @@
                 "total": "0"
               }
             ]
-          }
+          },
+          "gameId": "2026-05-17-01",
+          "rawCsvPath": "data/raw-games/2026-05-17.csv"
         },
         {
           "date": "2026-04-05",
-          "gameId": "2026-04-05-01",
-          "rawCsvPath": "data/raw-games/2026-04-05.csv",
           "dateLabel": "2026/04/05(日)",
           "opponent": "ナリタブライアンズ",
           "score": "9 - 7",
@@ -549,12 +547,12 @@
                 "total": "9"
               }
             ]
-          }
+          },
+          "gameId": "2026-04-05-01",
+          "rawCsvPath": "data/raw-games/2026-04-05.csv"
         },
         {
           "date": "2026-03-08",
-          "gameId": "2026-03-08-01",
-          "rawCsvPath": "data/raw-games/2026-03-08.csv",
           "dateLabel": "2026/03/08(日)",
           "opponent": "福岡ホーネッツ",
           "score": "3 - 2",
@@ -600,12 +598,12 @@
                 "total": "3"
               }
             ]
-          }
+          },
+          "gameId": "2026-03-08-01",
+          "rawCsvPath": "data/raw-games/2026-03-08.csv"
         },
         {
           "date": "2026-03-01",
-          "gameId": "2026-03-01-01",
-          "rawCsvPath": "data/raw-games/2026-03-01.csv",
           "dateLabel": "2026/03/01(日)",
           "opponent": "針摺ヴィヴァンツ",
           "score": "3 - 9",
@@ -651,7 +649,9 @@
                 "total": "3"
               }
             ]
-          }
+          },
+          "gameId": "2026-03-01-01",
+          "rawCsvPath": "data/raw-games/2026-03-01.csv"
         }
       ]
     },
