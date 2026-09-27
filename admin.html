@@ -1858,6 +1858,7 @@ function collectCurrentGroupGames() {
     // 通常編集・日付訂正でも、試合IDと元CSVの参照先は変えない。
     if (Object.prototype.hasOwnProperty.call(original, 'gameId')) game.gameId = original.gameId;
     if (Object.prototype.hasOwnProperty.call(original, 'rawCsvPath')) game.rawCsvPath = original.rawCsvPath;
+    if (original.actualParticipants) game.actualParticipants = JSON.parse(JSON.stringify(original.actualParticipants));
     // boxscoreは2026年度以降の試合にのみ存在しうるフィールド。過去データ(2023〜2025年度)の
     // 試合オブジェクトに不要な `boxscore: null` を追加してしまわないよう、値がある場合だけ設定する。
     const source = resultBoxscores.get(original) || original.boxscore || null;
@@ -1966,6 +1967,40 @@ async function prepareResultBoxscores(data) {
   }));
 }
 
+// 確定済み実参加者がある試合だけGPの判定元を変更する。旧試合は行の有無を維持。
+function confirmedGameNames(game, fallback) {
+  if (!game.actualParticipants) return new Set(fallback);
+  const names = game.actualParticipants.names;
+  if (!Array.isArray(names) || names.some(name => typeof name !== 'string' || !normalizeResultPlayerName(name))) throw new Error('実参加者の形式が不正です。');
+  return new Set(names.map(normalizeResultPlayerName));
+}
+function actualParticipantsHtml(imp, prefix) {
+  if (imp.mode === 'replace') return '<p class="admin-note">GPの確定済み実参加者は保持します。未確定の旧試合は従来の集計を維持します。</p>';
+  const names = [...new Set([...(imp.participantRoster || []).map(p => p.name), ...imp.playerStats.map(p => p.name)].map(normalizeResultPlayerName).filter(Boolean))];
+  const selected = new Set(imp.game.actualParticipants?.names || imp.playerStats.map(p => normalizeResultPlayerName(p.name)));
+  return `<fieldset id="${prefix}Participants"><legend>この試合の実際の参加者（GP）</legend>
+    <p class="admin-note">球場へ来てチーム活動に参加した人を確認してください。打席なし・監督としてのベンチ参加も含み、欠席者は外します。参加予定からの自動確定はしません。CSVに名前がある人を初期選択しています。</p>
+    <div class="attendance-options">${names.map(name => `<label class="attendance-option"><input type="checkbox" data-gp-member value="${escapeAttr(name)}" ${selected.has(name) ? 'checked' : ''}>${escapeAttr(name)}</label>`).join('')}</div>
+    <label>一覧にない参加者（1行に1名・成績と同じ名前）<textarea id="${prefix}ParticipantExtra" rows="2"></textarea></label>
+    <label class="attendance-option"><input type="checkbox" id="${prefix}ParticipantsConfirmed">実際の参加者を確認しました（選択した人はGP＋1）</label></fieldset>`;
+}
+function confirmActualParticipants(imp, prefix) {
+  if (imp.mode === 'replace' || imp.attempt) return;
+  if (!document.getElementById(`${prefix}ParticipantsConfirmed`)?.checked) throw new Error('この試合の実際の参加者を確認してください。');
+  const selected = Array.from(document.querySelectorAll(`#${prefix}Participants [data-gp-member]`)).filter(input => input.checked).map(input => input.value);
+  const extra = document.getElementById(`${prefix}ParticipantExtra`).value.split(/\r?\n/);
+  const names = [...new Set([...selected, ...extra].map(normalizeResultPlayerName).filter(Boolean))];
+  const attendance = { names, confirmedAt: new Date().toISOString() };
+  validateActualParticipants(imp, attendance);
+  imp.game.actualParticipants = attendance;
+}
+function validateActualParticipants(imp, attendance = imp.game.actualParticipants) {
+  if (!attendance) throw new Error('実参加者の確認が未完了です。');
+  const names = confirmedGameNames({ actualParticipants: attendance }, []);
+  const missing = imp.playerStats.filter(p => (p.stats.PA > 0 || p.rbi > 0 || p.sb > 0 || p.stats.H > 0) && !names.has(normalizeResultPlayerName(p.name)));
+  if (missing.length) throw new Error(`打撃・走塁記録がある選手を参加者から外すことはできません：${missing.map(p => p.name).join('、')}。誤記ならCSVを訂正してください。`);
+}
+
 // 保存前後の集計値の差だけを使う。既存の通算値・計算方法を一括で置き換えない。
 function totalResultBatting(data) {
   const totals = new Map();
@@ -1973,14 +2008,14 @@ function totalResultBatting(data) {
   (data.groups || []).filter((g) => g.era === 'current').forEach((group) => {
     group.games.forEach((game) => {
       const boxscore = resultBoxscores.get(game) || game.boxscore;
-      if (!boxscore) return;
+      if (!boxscore && !game.actualParticipants) return;
       const names = new Set();
-      boxscore.rows.forEach((row) => {
+      (boxscore?.rows || []).forEach((row) => {
         const name = normalizeResultPlayerName(row[boxscore.headers.indexOf('選手名')]);
         if (!name) return;
         if (!totals.has(name)) totals.set(name, { gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0 });
         const rec = totals.get(name);
-        if (!names.has(name)) rec.gp++;
+
         names.add(name);
         Object.entries(columns).forEach(([key, label]) => {
           const raw = row[boxscore.headers.indexOf(label)];
@@ -1988,6 +2023,10 @@ function totalResultBatting(data) {
           if (!Number.isInteger(value) || value < 0) throw new Error(`${name}の${label}が不正です。`);
           rec[key] += value;
         });
+      });
+      confirmedGameNames(game, names).forEach(name => {
+        if (!totals.has(name)) totals.set(name, { gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0 });
+        totals.get(name).gp++;
       });
     });
   });
@@ -2519,8 +2558,14 @@ async function saveCsvImport(imp) {
       if (scheduleJson.sha !== imp.scheduleSha) throw new Error(CSV_CONFLICT);
       validateNewCsvIdentity(resultsData, JSON.parse(base64ToUtf8(scheduleJson.content)), imp);
       if (sameDateCsvGames(resultsData, game.date).length && !imp.confirmSeparate) throw new Error('既存試合を確認し、別試合として新規登録することをチェックしてください。');
+      if (imp.participantRoster || game.actualParticipants) validateActualParticipants(imp);
       mergeGameIntoResults(resultsData, game, imp.group);
       applyBattingStatsToPlayers(statsData.seasonRanking.players, imp.playerStats);
+      if (game.actualParticipants) {
+        const legacyGame = { ...game }; delete legacyGame.actualParticipants;
+        const totals = item => totalResultBatting({ groups: [{ era: 'current', games: [item] }] });
+        applyResultBattingDelta(statsData, totals(legacyGame), totals(game));
+      }
       recomputeSeasonCategories(statsData.seasonRanking);
       rawPath = game.rawCsvPath;
       let existingRaw;
@@ -2586,6 +2631,9 @@ function validateNewCsvIdentity(results, schedule, imp) {
 }
 
 async function prepareNewCsvPreview(imp, head) {
+  const roster = await csvGitRequest(`contents/${FILES.roster}?ref=${head}`);
+  imp.participantRoster = JSON.parse(base64ToUtf8(roster.content)).roster;
+  if (!Array.isArray(imp.participantRoster)) throw new Error('実参加者確認用の選手名簿を読み込めません。');
   const json = await csvGitRequest(`contents/${FILES.schedule}?ref=${head}`);
   imp.scheduleSha = json.sha;
   imp.scheduleData = JSON.parse(base64ToUtf8(json.content));
@@ -2639,6 +2687,8 @@ function prepareCsvReplacement(resultsData, statsData, imp, oldCsv) {
     box.headers.push('盗塁');
   }
   const game = { ...oldGame, ...JSON.parse(JSON.stringify(imp.game)), gameId: oldGame.gameId, rawCsvPath: oldGame.rawCsvPath };
+  if (oldGame.actualParticipants) game.actualParticipants = JSON.parse(JSON.stringify(oldGame.actualParticipants));
+  else delete game.actualParticipants;
   const batting = game => totalResultBatting({ groups: [{ era: 'current', games: [game] }] });
   const beforeStats = JSON.stringify(statsData);
   applyResultBattingDelta(statsData, batting(beforeGame), batting(game));
@@ -2709,6 +2759,7 @@ function renderCsvPreviewHtml(imp) {
       </table>
     </div>
     ${newPlayerNote}
+    ${actualParticipantsHtml(imp, 'csv')}
     ${imp.diffHtml || ''}
     ${imp.newImportHtml || ''}
     <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">${imp.mode === 'replace' ? '選択した試合を修正版CSVで差し替える' : 'この内容で新規登録する'}</button>
@@ -2805,6 +2856,7 @@ async function commitCsvImport() {
   try {
     const imp = pendingCsvImport;
     if (!imp) return;
+    confirmActualParticipants(imp, 'csv');
     if (imp.mode !== 'replace' && !imp.attempt) imp.confirmSeparate = !!document.getElementById('csvConfirmSeparate')?.checked;
     const outcome = await saveCsvImport(imp);
     tabsLoaded.results = false;
@@ -3217,7 +3269,7 @@ async function parsePostgameCsv(csvText) {
     <p>${escapeAttr(imp.game.date)} ／ ${escapeAttr(imp.game.opponent)}<br><strong>スコア ${escapeAttr(imp.game.score)}</strong> ／ ${escapeAttr(imp.game.resultLabel)}</p>
     ${newNames.length ? `<p role="alert">未登録の選手名があります。表記を確認してください：${newNames.map(escapeAttr).join('、')}</p>` : ''}` +
     imp.playerStats.map(player => `<details class="postgame-player"><summary>${escapeAttr(player.name)}：安打${player.stats.H}・打点${player.rbi}</summary><p>打席${player.stats.PA} ／ 打数${player.stats.AB} ／ 二塁打${player.stats.B2} ／ 三塁打${player.stats.B3} ／ 本塁打${player.stats.HR} ／ 盗塁${player.sb}</p></details>`).join('') +
-    (imp.diffHtml || '') + (imp.newImportHtml || '').replaceAll('csvConfirmSeparate', 'postgameConfirmSeparate');
+    actualParticipantsHtml(imp, 'postgame') + (imp.diffHtml || '') + (imp.newImportHtml || '').replaceAll('csvConfirmSeparate', 'postgameConfirmSeparate');
   if (postgame.identityMismatch) postgame.preview = '<p role="alert">選択した試合とCSVの日付または相手名が異なります。</p><label><input type="checkbox" id="postgameIdentityConfirm">このCSVが選択した試合の記録であることを確認しました</label>' + postgame.preview;
   postgame.step = 3; postgame.uncertain = false; rememberPostgame();
 }
@@ -3246,6 +3298,7 @@ async function postgameAction() {
       if (postgame.identityMismatch && !document.getElementById('postgameIdentityConfirm')?.checked) throw new Error('選択した試合とCSVの違いを確認してください。');
       postgame.imp.confirmSeparate = !!document.getElementById('postgameConfirmSeparate')?.checked;
       if (postgame.mode === 'new' && sameDateCsvGames(postgame.imp.resultsData, postgame.imp.game.date).length && !postgame.imp.confirmSeparate) throw new Error('別試合として登録する確認にチェックしてください。');
+      confirmActualParticipants(postgame.imp, 'postgame');
       postgame.step = 4; rememberPostgame();
     } else if (postgame.step === 4) {
       if (!confirm(`${postgame.label}\n${postgame.mode === 'replace' ? 'この試合を差し替えます。' : 'この試合を新規登録します。'}`)) return;

@@ -22,6 +22,7 @@ function setup() {
   vm.runInContext(script.slice(0, script.lastIndexOf('refreshTokenUI();\nrefreshGcTokenUI();')), context);
   const files = new Map(['results.json', 'stats.json'].map((name) => ['data/' + name, read(name)]));
   files.set('data/schedule.json', { games: [] });
+  files.set('data/players.json', read('players.json'));
   const mock = installGitHub(context, files);
   const csvText = fs.readFileSync(path.join(fixtures, 'raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
   const imp = context.buildGameImportFromCsv(csvText);
@@ -29,6 +30,8 @@ function setup() {
     resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha',
     identitySelected: true, scheduleId: null, scheduleSha: 'data/schedule.json:sha' });
   Object.assign(imp.game, context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
+  element('csvParticipantsConfirmed').checked = true;
+  context.document.querySelectorAll = selector => selector.includes('[data-gp-member]') ? (vm.runInContext('pendingCsvImport?.playerStats || []', context)).map(p => ({value:p.name,checked:true})) : [];
   return { context, files, mock, imp, element };
 }
 
@@ -460,6 +463,8 @@ function workflowSetup() {
   c.localStorage = { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   vm.runInContext(fs.readFileSync(path.join(root, 'game-attendance.js'), 'utf8'), c);
   c.confirm = () => true;
+  env.element('postgameParticipantsConfirmed').checked = true;
+  c.document.querySelectorAll = selector => selector.includes('[data-gp-member]') ? (vm.runInContext('postgame.imp?.playerStats || []', c)).map(p => ({value:p.name,checked:true})) : [];
   c.todayJstDateString = () => '2026-09-27';
   files.set('data/schedule.json', { games: [
     { id: 'today-1', date: '2026-09-27', opponent: 'Pana Spirits', time: '9:00' },
@@ -651,4 +656,98 @@ test('試合後: 保存中に別試合へ切替できず、対象と再開情報
   env.element('postgameReset').onclick();
   assert.equal(env.state().id, 'today-1');
   env.run('postgameBusy = false;');
+});
+
+function confirmGp(imp, extra = []) {
+  imp.game.actualParticipants = { names: [...imp.playerStats.map(p => p.name), ...extra], confirmedAt: '2026-09-27T10:00:00Z' };
+}
+
+test('実参加者GP: 打席なしの監督はGPだけ加算し欠席者・打撃・ランキング・過年度を変更しない', async () => {
+  const { context: c, imp, files } = setup();
+  const expected = clone(imp.statsData);
+  c.applyBattingStatsToPlayers(expected.seasonRanking.players, imp.playerStats);
+  c.recomputeSeasonCategories(expected.seasonRanking);
+  const bench = expected.seasonRanking.players.find(p => !imp.playerStats.some(b => b.name === p.name));
+  assert.ok(bench);
+  confirmGp(imp, [bench.name, bench.name, '新監督']);
+  await c.saveCsvImport(imp);
+  const stats = files.get('data/stats.json');
+  for (const player of expected.seasonRanking.players) {
+    const after = stats.seasonRanking.players.find(p => p.name === player.name);
+    assert.deepEqual(after, {...player, gp:player.gp + (player.name === bench.name ? 1 : 0)});
+  }
+  const manager = stats.seasonRanking.players.find(p => p.name === '新監督');
+  assert.equal(manager.gp, 1);
+  for (const key of ['pa','ab','h','b2','b3','hr','rbi','sb']) assert.equal(manager[key], 0);
+  assert.deepEqual(stats.seasonRanking.categories, clone(expected.seasonRanking.categories));
+  assert.deepEqual(files.get('data/results.json').groups.filter(g=>g.era !== 'current'), imp.resultsData.groups.filter(g=>g.era !== 'current'));
+  assert.equal(files.get(imp.game.rawCsvPath), imp.csvText);
+  await c.saveCsvImport(imp);
+  assert.equal(files.get('data/stats.json').seasonRanking.players.find(p=>p.name==='新監督').gp, 1);
+});
+
+test('実参加者確認なし・打撃記録がある人を除外した場合は書き込まない', async () => {
+  const { context: c, imp, mock } = setup();
+  imp.participantRoster = [];
+  await assert.rejects(c.saveCsvImport(imp), /未完了/);
+  imp.game.actualParticipants = {names:[],confirmedAt:'now'};
+  await assert.rejects(c.saveCsvImport(imp), /参加者から外す/);
+  assert.equal(mock.publications, 0);
+});
+
+for (const failBlob of [1,2,3]) test(`実参加者とGPも一括保存: ファイル${failBlob}失敗では未反映、再試行で1回のみ加算`, async () => {
+  const { context: c, imp, files, mock } = setup();
+  confirmGp(imp,['ベンチ監督']);
+  const before = clone(imp);
+  mock.failBlob = failBlob;
+  await assert.rejects(c.saveCsvImport(imp), /blob failure/);
+  assert.deepEqual(files.get('data/stats.json'), read('stats.json'));
+  assert.deepEqual(files.get('data/results.json'), read('results.json'));
+  assert.deepEqual(clone(imp),before);
+  mock.failBlob = 0;
+  await c.saveCsvImport(imp); await c.saveCsvImport(imp);
+  assert.equal(files.get('data/stats.json').seasonRanking.players.find(p=>p.name==='ベンチ監督').gp,1);
+});
+
+test('実参加者GP: 応答消失後の再試行・CSV差し替えでも確定参加者とGPを保持', async () => {
+  const { context: c, imp, files, mock } = setup();
+  confirmGp(imp,['ベンチ監督']);
+  mock.loseResponse=true;
+  await c.saveCsvImport(imp); await c.saveCsvImport(imp);
+  const before = clone(files.get('data/stats.json'));
+  const correction = imp.csvText.replace('一ゴロ','二ゴロ');
+  const replacement = {...c.buildGameImportFromCsv(correction), csvText:correction, mode:'replace', targetGameId:imp.game.gameId,
+    resultsSha:'data/results.json:sha', statsSha:'data/stats.json:sha',rawSha:imp.game.rawCsvPath+':sha'};
+  await c.saveCsvImport(replacement); await c.saveCsvImport(replacement);
+  assert.deepEqual(files.get('data/stats.json'), before);
+  const game = files.get('data/results.json').groups.flatMap(g=>g.games).find(g=>g.gameId===imp.game.gameId);
+  assert.deepEqual(game.actualParticipants, clone(imp.game.actualParticipants));
+});
+
+test('試合後フローは実参加者の確認まで保存へ進まず、名前の重複を除いて確定', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  env.element('postgameParticipantsConfirmed').checked=false;
+  await env.context.postgameAction();
+  assert.equal(env.state().step,3);
+  assert.match(env.element('postgameFlow').innerHTML,/実際の参加者を確認/);
+  env.element('postgameParticipantsConfirmed').checked=true;
+  env.element('postgameParticipantExtra').value='監督\n監督';
+  await env.context.postgameAction();
+  assert.equal(env.state().step,4);
+  assert.equal(env.state().imp.game.actualParticipants.names.filter(n=>n==='監督').length,1);
+  await env.context.postgameAction();
+  assert.equal(env.files.get('data/stats.json').seasonRanking.players.find(p=>p.name==='監督').gp,1);
+});
+
+test('旧CSVのゼロ打席行を実参加者から外すとGPだけ0、参加情報なしの旧試合は1', () => {
+  const {context:c}=setup();
+  const game={boxscore:{headers:['選手名','打席','打数'],rows:[['欠席者','0','0']]}};
+  const totals = g => c.totalResultBatting({groups:[{era:'current',games:[g]}]});
+  assert.equal(totals(game).get('欠席者').gp,1);
+  game.actualParticipants={names:['ベンチ参加'],confirmedAt:'now'};
+  assert.equal(totals(game).get('欠席者').gp,0);
+  assert.equal(totals(game).get('ベンチ参加').gp,1);
+  assert.equal(totals(game).get('ベンチ参加').pa,0);
 });

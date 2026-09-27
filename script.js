@@ -500,7 +500,7 @@ function renderResults(container, resultsData) {
     if (seasonRows.length) {
       html += `
       <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
-      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
+      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。GPは実参加者を確定した試合では、打席の有無にかかわらず球場でチーム活動に参加した人を1試合として集計します。未確定の過去試合は従来の出場記録に基づきます。</p>
       ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
     }
     return html;
@@ -576,7 +576,16 @@ function aggregateBoxscoreSeason(group) {
       if ('犠飛' in idx) t.SF += num('犠飛');
       namesInGame.add(name);
     });
-    namesInGame.forEach((name) => { totals[name].GP += 1; });
+    const gpNames = group.era === 'current' && Array.isArray(game.actualParticipants?.names)
+      ? new Set(game.actualParticipants.names) : namesInGame;
+    gpNames.forEach(name => {
+      if (!name || NON_ROSTER_GUEST_PLAYERS.includes(name)) return;
+      if (!totals[name]) {
+        totals[name] = { name, GP: 0, PA: 0, AB: 0, H: 0, B1: 0, B2: 0, B3: 0, HR: 0, RBI: 0, Runs: 0, SO: 0, BB: 0, HBP: 0, SH: 0, SF: 0 };
+        order.push(name);
+      }
+      totals[name].GP += 1;
+    });
   });
   // すべてのボックススコアに打席(PA)が記録されている場合のみPA列を信頼できるとみなす
   // (2023〜2025年度のように一部の試合にPAが無いと合計が過小になり誤解を招くため)
@@ -748,7 +757,7 @@ function renderPlayers(container, statsData, statsFailed, resultsData) {
     const gameCountNote = gameCount === null ? '' : `、全${gameCount}試合`;
     playerStatsHtml = `
       <h3 class="table-title">2026年 個人打撃成績</h3>
-      <p class="placeholder-note">※ 2026年シーズン${gameCountNote}の記録より。出場試合数は、打席がなくても守備・代走などの出場記録があれば1試合としてカウント。ベンチ入りのみの場合はカウントしない。</p>
+      <p class="placeholder-note">※ 2026年シーズン${gameCountNote}の記録より。GPは実参加者を確定した試合では、打席の有無にかかわらず球場でチーム活動に参加した人を1試合として集計します。未確定の過去試合は従来の出場記録に基づきます。</p>
       ${renderPlayerStatsTable(ranking.players)}`;
   }
 

@@ -77,3 +77,23 @@ test('mergeTiesIntoTopRows: 未指定なら0以下で打ち切り、指定時は
   assert.deepEqual(rows(0.3), [{ name: 'A', value: '0.36' }]);
   assert.deepEqual(rows(1), []);
 });
+
+test('公開集計: 当年度の実参加者は打席なしでもGP1、旧年度と旧形式の数値は維持', () => {
+  const publicScript = fs.readFileSync(path.join(root,'script.js'),'utf8');
+  const ctx = vm.createContext({boxscoreSourceOf: game => game.boxscore});
+  vm.runInContext("const NON_ROSTER_GUEST_PLAYERS = ['中山','大内'];" + publicScript.slice(publicScript.indexOf('function aggregateBoxscoreSeason('),publicScript.indexOf('function renderSeasonTotalsTable(')), ctx);
+  const headers = ['選手名','打数','安打','単打','二塁打','三塁打','本塁打','打点','得点','三振','四球','死球','打席'];
+  const game = {boxscore:{headers,rows:[['打者',3,1,1,0,0,0,0,0,0,0,0,3],['欠席',0,0,0,0,0,0,0,0,0,0,0,0]]}};
+  const original = JSON.stringify(game);
+  const old = ctx.aggregateBoxscoreSeason({era:'current',games:[game]}).rows;
+  game.actualParticipants = {names:['打者','監督','監督']};
+  const current = ctx.aggregateBoxscoreSeason({era:'current',games:[game]}).rows;
+  assert.deepEqual({...current.find(p=>p.name==='打者')}, {...old.find(p=>p.name==='打者')});
+  assert.equal(current.find(p=>p.name==='監督').GP,1);
+  assert.equal(current.find(p=>p.name==='監督').AB,0);
+  assert.equal(current.find(p=>p.name==='欠席').GP,0);
+  const archived = ctx.aggregateBoxscoreSeason({era:'past',games:[game]}).rows;
+  assert.equal(JSON.stringify(archived),JSON.stringify(old));
+  delete game.actualParticipants;
+  assert.equal(JSON.stringify(game),original);
+});

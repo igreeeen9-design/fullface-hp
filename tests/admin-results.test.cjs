@@ -261,6 +261,9 @@ test('CSV取り込み後に通常保存しても通算成績を二重加算し�
   Object.assign(imp.game, env.context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
   env.context.importForTest = imp;
   env.run('pendingCsvImport = importForTest;');
+  env.element('csvParticipantsConfirmed').checked = true;
+  env.element('csvParticipantExtra').value = '';
+  env.context.document.querySelectorAll = selector => selector.includes('[data-gp-member]') ? imp.playerStats.map(p => ({value:p.name,checked:true})) : [];
   await env.run('commitCsvImport()');
   assert.equal(env.files.get('data/results.json').groups[0].games.length, 9);
   const importedStats = clone(env.files.get('data/stats.json'));
@@ -373,4 +376,13 @@ test('既存boxscoreのある試合を通常保存しても成績と識別情報
   assert.equal(saved.rawCsvPath, game.rawCsvPath);
   assert.deepEqual(env.files.get('data/stats.json'), beforeStats);
   assert.ok(env.writes.every(write => write.name === 'data/results.json'));
+});
+
+test('通常の試合結果フォーム編集でも確定済み実参加者を保持する', async () => {
+  const env = setup();
+  await env.functions.loadResults();
+  env.run("states.results.data.groups[0].games[0].actualParticipants = {names:['監督'],confirmedAt:'now'};");
+  bindResultsForm(env);
+  const games = env.functions.collectCurrentGroupGames();
+  assert.deepEqual(clone(games[0].actualParticipants), {names:['監督'],confirmedAt:'now'});
 });
