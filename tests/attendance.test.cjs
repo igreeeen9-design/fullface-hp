@@ -247,11 +247,11 @@ test('旧next-gameの参加者も日程編集で失わず、scheduleへの初回
   assert.equal(env.writes[0].data.games[0].date,'2026-10-03');
 });
 
-test('attendanceやIDのない旧データでも通常公開・下書き・試合終了が動く', async () => {
+test('IDのない旧データは公開・下書き可、終了は再読み込み案内で停止', async () => {
   const env=setup(null); delete env.original.current.scheduleGameId;
   await env.run('loadNextGame()'); await env.run('saveCurrent()'); await env.run('saveDraft()');
   env.ctx.todayJstDateString=()=> '2026-09-27'; await env.run('archiveAndClear()');
-  assert.equal(env.writes.length,3);
+  assert.equal(env.writes.length,2);
   for (const write of env.writes) assert.ok(!('attendance' in write.data.current));
 });
 
@@ -268,7 +268,10 @@ function switchingSetup(count = 2, sameOpponent = false) {
   env.run('states.nextGame.data = { current: switchCurrent, history: [], drafts: [] }; states.schedule.data = switchSchedule;');
   env.ctx.todayJstDateString = () => '2026-09-27';
   env.results = { groups: [] };
-  env.ctx.ghGet = async file => ({ sha: 'read-sha', content: Buffer.from(JSON.stringify(file.endsWith('results.json') ? env.results : env.schedule)).toString('base64') });
+  env.remoteNext = env.run('states.nextGame.data');
+  env.ctx.ghGet = async file => ({ sha: 'next-sha', content: Buffer.from(JSON.stringify(file.endsWith('next-game.json') ? env.remoteNext : file.endsWith('results.json') ? env.results : env.schedule)).toString('base64') });
+  const put = env.ctx.ghPut;
+  env.ctx.ghPut = async (...args) => { const result = await put(...args); if (args[0].endsWith('next-game.json')) env.remoteNext = clone(args[1]); return result; };
   return env;
 }
 
@@ -348,7 +351,7 @@ test('次戦IDなしで同日同一相手が複数なら推測せず停止', asy
   env.run('delete states.nextGame.data.current.scheduleGameId;');
   await env.run('archiveAndClear()');
   assert.equal(env.writes.length, 0);
-  assert.match(env.node('statusMsg').textContent, /一意に特定できません/);
+  assert.match(env.node('statusMsg').textContent, /対象試合ID/);
 });
 
 test('結果取得失敗・次戦SHA競合では切替前の状態を維持', async () => {
@@ -439,4 +442,117 @@ test('試合ID不明・結果登録済みの試合は中止として記録しな
     await env.run("archiveAndClear('cancelled')");
     assert.equal(env.writes.length, 0);
   }
+});
+
+for (const action of [undefined, 'cancelled']) test(`直前の${action ? '雨天中止' : '終了'}を1回だけ取り消し、現在と履歴を復元`, async () => {
+  const env = switchingSetup(2);
+  const before = clone(env.remoteNext);
+  const dialogs = [];
+  env.ctx.confirm = text => { dialogs.push(text); return true; };
+  env.ctx.testAction = action;
+  await env.run('archiveAndClear(testAction)');
+  assert.match(dialogs[0], /2026-09-27 相手1/);
+  assert.match(dialogs[0], /2026-09-27 相手2/);
+  assert.ok(env.remoteNext.lastTransitionUndo);
+  await env.run('undoLastTransition()');
+  assert.deepEqual(env.remoteNext.current, before.current);
+  assert.deepEqual(env.remoteNext.history, before.history);
+  assert.equal(env.remoteNext.lastTransitionUndo, null);
+  assert.match(dialogs[1], /現在の次戦.*相手2/);
+  assert.match(dialogs[1], /復元する試合.*相手1/);
+  await env.run('undoLastTransition()');
+  assert.equal(env.writes.length, 2);
+});
+
+test('通常管理の画面IDと最新IDが不一致なら確認前に停止', async () => {
+  const env = switchingSetup();
+  env.remoteNext = clone(env.remoteNext);
+  env.remoteNext.current.scheduleGameId = 'today-other';
+  let confirmed = false; env.ctx.confirm = () => { confirmed = true; return true; };
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes.length, 0);
+  assert.equal(confirmed, false);
+  assert.match(env.node('statusMsg').textContent, /再読み込み/);
+});
+
+for (const type of ['current', 'history']) test(`取り消し: ${type}が変わっていたら復元しない`, async () => {
+  const env = switchingSetup();
+  await env.run('archiveAndClear()');
+  if (type === 'current') env.remoteNext.current.note = '後続編集';
+  else env.remoteNext.history.pop();
+  const before = clone(env.remoteNext);
+  await env.run('undoLastTransition()');
+  assert.equal(env.writes.length, 1);
+  assert.deepEqual(env.remoteNext, before);
+});
+
+test('取り消しは最新の下書き・通常オーダー・無関係な項目を保持', async () => {
+  const env = switchingSetup();
+  await env.run('archiveAndClear()');
+  env.remoteNext.drafts = [{ name: '後から追加' }];
+  env.remoteNext.defaultOrder = { lineup: [{ name: '後から変更' }] };
+  env.remoteNext.extra = '保持';
+  await env.run('undoLastTransition()');
+  assert.deepEqual(env.remoteNext.drafts, [{ name: '後から追加' }]);
+  assert.equal(env.remoteNext.defaultOrder.lineup[0].name, '後から変更');
+  assert.equal(env.remoteNext.extra, '保持');
+});
+
+test('取り消し保存のSHA競合は復元せず停止', async () => {
+  const env = switchingSetup();
+  await env.run('archiveAndClear()');
+  const before = clone(env.remoteNext);
+  env.ctx.ghPut = async () => { throw new Error('HTTP 409'); };
+  await env.run('undoLastTransition()');
+  assert.deepEqual(env.remoteNext, before);
+  assert.equal(env.writes.length, 1);
+});
+
+test('取り消し応答消失でも反映を再確認し、2回目は履歴を再削除しない', async () => {
+  const env = switchingSetup();
+  await env.run('archiveAndClear()');
+  const put = env.ctx.ghPut;
+  env.ctx.ghPut = async (...args) => { await put(...args); throw new Error('response lost'); };
+  await env.run('undoLastTransition()');
+  assert.equal(env.remoteNext.current.scheduleGameId, 'double-1');
+  assert.equal(env.remoteNext.lastTransitionUndo, null);
+  await env.run('undoLastTransition()');
+  assert.equal(env.writes.length, 2);
+});
+
+test('2回切替した後の取り消しは最後の1回だけ', async () => {
+  const env = switchingSetup(3);
+  await env.run('archiveAndClear()');
+  await env.run('archiveAndClear()');
+  await env.run('undoLastTransition()');
+  assert.equal(env.remoteNext.current.scheduleGameId, 'double-2');
+  assert.equal(env.remoteNext.history.length, 1);
+  await env.run('undoLastTransition()');
+  assert.equal(env.writes.length, 3);
+});
+
+test('取り消し応答も確認も失敗した後は、再試行時に確認を先行して二重保存しない', async () => {
+  const env = switchingSetup();
+  await env.run('archiveAndClear()');
+  const put = env.ctx.ghPut, get = env.ctx.ghGet;
+  let unavailable = false;
+  env.ctx.ghPut = async (...args) => { await put(...args); unavailable = true; throw new Error('response lost'); };
+  env.ctx.ghGet = async (...args) => { if (unavailable) throw new Error('offline'); return get(...args); };
+  await env.run('undoLastTransition()');
+  assert.match(env.node('statusMsg').textContent, /未確認/);
+  unavailable = false;
+  await env.run('undoLastTransition()');
+  assert.equal(env.writes.length, 2);
+  assert.equal(env.remoteNext.current.scheduleGameId, 'double-1');
+});
+
+test('次戦なしの確認は空になることを明示し、終了操作は閉じた詳細内にある', async () => {
+  const env = switchingSetup(1);
+  env.schedule.games = [env.schedule.games[0]];
+  let message; env.ctx.confirm = text => { message = text; return false; };
+  await env.run('archiveAndClear()');
+  assert.match(message, /次戦情報は空になります/);
+  assert.equal(env.writes.length, 0);
+  const html = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
+  assert.match(html, /<details class="transition-actions"><summary>試合を終了・中止する<\/summary>[\s\S]*?id="archiveBtn"[\s\S]*?id="cancelGameBtn"[\s\S]*?<\/details>/);
 });

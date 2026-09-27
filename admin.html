@@ -435,6 +435,8 @@
 #postgameFlow table { width: 100%; table-layout: fixed; font-size: .8rem; }
 #postgameFlow td { overflow-wrap: anywhere; vertical-align: top; }
 #postgameFlow .postgame-player { padding: .5rem 0; border-bottom: 1px solid #e1e6eb; }
+.transition-actions { margin-top: 2rem; padding: 1rem; border: 1px solid #ccd4db; border-radius: 8px; }
+.transition-actions button { display: block; width: 100%; min-height: 48px; margin: 1.2rem 0; }
 </style>
 </head>
 <body>
@@ -598,9 +600,12 @@
     <p class="admin-note">試合終了後は、未終了の試合を日付・開始時刻順にセットします。同日に複数試合ある場合は、日程にそれぞれ異なる開始時刻を設定してください。雨天延期は「雨天中止」で処理し、振替は試合日程の「+ 試合を追加」から新しく登録してください。元日程の日付を書き換えて振替にしないでください。</p>
     <div class="admin-actions">
       <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">公開する</button>
+    </div>
+    <details class="transition-actions"><summary>試合を終了・中止する</summary><p class="admin-note">公開とは別の操作です。対象と切替先を確認してください。</p>
       <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終了(履歴に保存し、次の試合を自動セット)</button>
       <button type="button" class="admin-btn admin-btn-outline" id="cancelGameBtn">この試合を雨天中止（次の試合へ）</button>
-    </div>
+      <button type="button" class="admin-btn admin-btn-outline" id="undoTransitionBtn">直前の終了・中止を取り消す</button>
+    </details>
   </div>
 
   <!-- ============ 試合日程 ============ -->
@@ -1254,7 +1259,7 @@ async function saveDefaultOrder() {
     const data = states.nextGame.data;
     const { lineup, bench } = collectNextGameForm();
     const defaultOrder = { lineup, bench, savedAt: new Date().toISOString() };
-    const newData = { current: data.current, drafts: data.drafts || [], defaultOrder, history: data.history || [] };
+    const newData = { ...data, current: data.current, drafts: data.drafts || [], defaultOrder, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, 'いつものオーダーを更新');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderDefaultOrderInfo();
@@ -1280,7 +1285,7 @@ async function saveDraft() {
     draft.name = name;
     draft.savedAt = new Date().toISOString();
     drafts.push(draft);
-    const newData = { current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...data, current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, `次戦情報の下書き「${name}」を保存`);
     states.nextGame = { sha: json.content.sha, data: newData };
     nameInput.value = '';
@@ -1300,7 +1305,7 @@ async function deleteDraft(index) {
     const data = states.nextGame.data;
     const drafts = (data.drafts || []).slice();
     drafts.splice(index, 1);
-    const newData = { current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...data, current: data.current, drafts, defaultOrder: data.defaultOrder || null, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報の下書きを削除');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderDraftList();
@@ -1338,7 +1343,7 @@ async function saveCurrent() {
     const data = states.nextGame.data;
     if (data.current && data.current.attendance) current.attendance = data.current.attendance; // 旧形式の読み取り互換
     if (data.current && data.current.scheduleGameId) current.scheduleGameId = data.current.scheduleGameId;
-    const newData = { current, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: data.history || [] };
+    const newData = { ...data, current, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を公開');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderNextGameStatus();
@@ -1395,9 +1400,6 @@ function completedScheduleIds(results, history) {
 
 async function archiveAndClear(action, expectedGameId) {
   const cancelled = action === 'cancelled';
-  if (!confirm(cancelled
-    ? '現在公開中の次戦を雨天中止として保存し、次の未終了試合へ進みます。振替は新しい日程として登録してください。よろしいですか?'
-    : '現在の次戦情報を履歴に保存し、試合日程から次の試合を自動セットします。よろしいですか?')) return;
   const btn = document.getElementById('archiveBtn');
   const cancelBtn = document.getElementById('cancelGameBtn');
   if (btn.disabled || cancelBtn.disabled) return;
@@ -1405,15 +1407,14 @@ async function archiveAndClear(action, expectedGameId) {
   cancelBtn.disabled = true;
   showStatus('loading', '履歴に保存中...');
   try {
-    let data = states.nextGame.data;
-    if (expectedGameId) {
-      const latest = await ghGet(FILES.nextGame);
-      data = JSON.parse(base64ToUtf8(latest.content));
-      if ((data.history || []).some(game => game.scheduleGameId === expectedGameId)) return { skipped: '切替済み' };
-      if (data.current?.scheduleGameId !== expectedGameId) return { skipped: 'この試合は現在の次戦ではないため、次戦切替は不要です' };
-      states.nextGame = { data, sha: latest.sha };
-    }
-    const current = cancelled || expectedGameId ? { ...data.current } : collectNextGameForm();
+    if (pendingTransitionWrite) { await retryTransitionWrite(); return { saved: true }; }
+    const targetId = expectedGameId || states.nextGame?.data?.current?.scheduleGameId;
+    const latest = await ghGet(FILES.nextGame);
+    const data = JSON.parse(base64ToUtf8(latest.content));
+    if (expectedGameId && (data.history || []).some(game => game.scheduleGameId === targetId)) return { skipped: '切替済み' };
+    if (!targetId || data.current?.scheduleGameId !== targetId) throw new Error('対象試合IDが最新の次戦と一致しません。画面を再読み込みしてください。');
+    if ((data.history || []).some(game => game.scheduleGameId === targetId)) throw new Error('この試合は既に終了・中止済みです。画面を再読み込みしてください。');
+    const current = { ...data.current };
     delete current.attendance;
     current.updatedAt = new Date().toISOString();
     const history = data.history || [];
@@ -1439,8 +1440,10 @@ async function archiveAndClear(action, expectedGameId) {
       ? { opponent: nextGame.opponent || '', date: nextGame.date || '', startTime: normalizeTimeForInput(nextGame.time), meetTime: '', location: nextGame.location || '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() }
       : { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     if (nextGame && nextGame.id) blankCurrent.scheduleGameId = nextGame.id;
-    const newData = { current: blankCurrent, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: newHistory };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, cancelled ? '雨天中止: 試合IDを履歴に保存し、次の試合をセット' : '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
+    const newData = { ...data, current: blankCurrent, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: newHistory };
+    if (!confirm(`対象：${transitionLabel(data.current)}\n操作：${cancelled ? '雨天中止' : '終了'}\n切替後：${transitionLabel(blankCurrent)}`)) return;
+    newData.lastTransitionUndo = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, beforeCurrent: data.current, afterCurrent: blankCurrent, beforeHistory: history, entry: newHistory[newHistory.length - 1] };
+    const json = await saveTransitionVerified(newData, latest.sha, cancelled ? '雨天中止: 試合IDを履歴に保存し、次の試合をセット' : '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
     states.nextGame = { sha: json.content.sha, data: newData };
     fillNextGameForm(blankCurrent);
     renderNextGameStatus();
@@ -1456,6 +1459,66 @@ async function archiveAndClear(action, expectedGameId) {
     cancelBtn.disabled = false;
   }
 }
+
+function transitionLabel(current) {
+  return current?.date || current?.opponent ? `${current.date || '日付未定'} ${current.opponent || '相手未定'}` : '次戦情報は空になります';
+}
+let pendingTransitionWrite = null;
+function transitionMatches(data, expected) {
+  return ['current', 'history', 'lastTransitionUndo'].every(key => JSON.stringify(data[key]) === JSON.stringify(expected[key]));
+}
+async function saveTransitionVerified(data, sha, message) {
+  pendingTransitionWrite = { data, sha, message };
+  try {
+    const result = await ghPut(FILES.nextGame, data, sha, message);
+    pendingTransitionWrite = null;
+    return result;
+  } catch (error) {
+    const latest = await ghGet(FILES.nextGame).catch(() => null);
+    if (latest && transitionMatches(JSON.parse(base64ToUtf8(latest.content)), data)) {
+      pendingTransitionWrite = null;
+      return { content: { sha: latest.sha } };
+    }
+    if ((latest && latest.sha !== sha) || /HTTP (409|422)/.test(error.message)) { pendingTransitionWrite = null; throw new Error('SHA競合のため保存を停止しました。再読み込みしてください。'); }
+    throw new Error('保存結果が未確認です。再度操作すると、先に反映状況を確認します。' + error.message);
+  }
+}
+async function retryTransitionWrite() {
+  const pending = pendingTransitionWrite;
+  const latest = await ghGet(FILES.nextGame);
+  const actual = JSON.parse(base64ToUtf8(latest.content));
+  if (transitionMatches(actual, pending.data)) pendingTransitionWrite = null;
+  else {
+    if (latest.sha !== pending.sha) { pendingTransitionWrite = null; throw new Error('SHA競合のため再試行を停止しました。再読み込みしてください。'); }
+    await saveTransitionVerified(pending.data, pending.sha, pending.message);
+  }
+  await loadNextGame();
+  showStatus('ok', '処理の反映を確認しました。');
+}
+async function undoLastTransition() {
+  const button = document.getElementById('undoTransitionBtn');
+  if (button.disabled || document.getElementById('archiveBtn').disabled) return;
+  button.disabled = true;
+  document.getElementById('archiveBtn').disabled = true;
+  document.getElementById('cancelGameBtn').disabled = true;
+  try {
+    if (pendingTransitionWrite) { await retryTransitionWrite(); return; }
+    const latest = await ghGet(FILES.nextGame);
+    const data = JSON.parse(base64ToUtf8(latest.content));
+    const undo = data.lastTransitionUndo;
+    if (!undo) throw new Error('取り消せる直前の操作がありません。');
+    if (JSON.stringify(data.current) !== JSON.stringify(undo.afterCurrent)) throw new Error('切替後の次戦が編集されています。自動復元を停止しました。');
+    if (JSON.stringify(data.history) !== JSON.stringify([...undo.beforeHistory, undo.entry])) throw new Error('履歴状態が変わっています。自動復元を停止しました。');
+    if (!confirm(`直前の終了・中止を取り消します。\n現在の次戦：${transitionLabel(data.current)}\n→ 復元する試合：${transitionLabel(undo.beforeCurrent)}`)) return;
+    const restored = { ...data, current: undo.beforeCurrent, history: undo.beforeHistory, lastTransitionUndo: null };
+    const saved = await saveTransitionVerified(restored, latest.sha, '直前の終了・中止を取り消す');
+    states.nextGame = { data: restored, sha: saved.content.sha };
+    fillNextGameForm(restored.current); renderNextGameStatus();
+    showStatus('ok', '直前の終了・中止を取り消しました。');
+  } catch (error) { showStatus('err', error.message); }
+  finally { button.disabled = false; document.getElementById('archiveBtn').disabled = false; document.getElementById('cancelGameBtn').disabled = false; }
+}
+document.getElementById('undoTransitionBtn').addEventListener('click', undoLastTransition);
 
 document.getElementById('addLineupBtn').addEventListener('click', () => {
   document.getElementById('lineupRows').appendChild(makeLineupRow('', '', '', ''));
