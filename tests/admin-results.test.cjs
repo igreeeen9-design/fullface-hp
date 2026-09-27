@@ -32,7 +32,7 @@ function setup() {
   // ブラウザ起動時の空スタメン描画だけを除き、管理画面の実際の関数を実行する。
   vm.runInContext(script.slice(0, script.lastIndexOf('refreshTokenUI();\nrefreshGcTokenUI();')), context);
   const run = (code) => vm.runInContext(code, context);
-  const functions = run('({ prepareResultBoxscores, totalResultBatting, applyResultBattingDelta, buildGameImportFromCsv, applyBattingStatsToPlayers, recomputeSeasonCategories, reconstructAtBatsFromRow, collectBoxscoreFromRow, collectCurrentGroupGames, mergeGameIntoResults, saveResults, loadResults })');
+  const functions = run('({ prepareResultBoxscores, totalResultBatting, applyResultBattingDelta, buildGameImportFromCsv, applyBattingStatsToPlayers, recomputeSeasonCategories, collectCurrentGroupGames, mergeGameIntoResults, saveResults, loadResults })');
   const files = new Map(['results.json', 'stats.json'].map((name) => [`data/${name}`, readJson(name)]));
   files.set('data/schedule.json', { games: [] });
   const writes = [];
@@ -66,28 +66,6 @@ function editBoxscore(env, game, edit) {
   env.run('resultBoxscores.set(gameForTest, gameForTest.boxscore)');
 }
 
-function panelForBoxscore(env, boxscore) {
-  const headers = boxscore.headers;
-  const cards = boxscore.rows.map((row) => ({
-    _sb: Number(row[headers.indexOf('盗塁')] || 0),
-    querySelector(selector) {
-      const label = { '.bx-name': '選手名', '.bx-position': '守備', '.bx-rbi': '打点', '.bx-runs': '得点' }[selector];
-      return { value: String(row[headers.indexOf(label)] || '') };
-    },
-    querySelectorAll() {
-      return env.functions.reconstructAtBatsFromRow(headers, row).map((value) => ({ value }));
-    },
-  }));
-  return { querySelectorAll: () => cards };
-}
-
-function editedPanelBoxscore(env, boxscore) {
-  return env.functions.collectBoxscoreFromRow({
-    dataset: { bxInit: '1' },
-    querySelector: () => panelForBoxscore(env, boxscore),
-  });
-}
-
 test('固定データ(2026年10試合): CSV補完と無変更保存で通算・ランキング・過去年度を完全維持', async () => {
   const env = await existing();
   const before = clone(env.stats);
@@ -97,12 +75,7 @@ test('固定データ(2026年10試合): CSV補完と無変更保存で通算・�
   assert.equal(env.functions.applyResultBattingDelta(env.stats, env.baseline, env.functions.totalResultBatting(env.results)), false);
   assert.deepEqual(env.stats, before);
   assert.deepEqual(env.results, resultsBefore);
-  // 全試合の編集パネルを開いて保存した場合も、再構成で値が変わらない。
-  for (const group of env.results.groups.filter((g) => g.era === 'current')) {
-    for (const game of group.games) editBoxscore(env, game, (b) => Object.assign(b, editedPanelBoxscore(env, b)));
-  }
-  assert.equal(env.functions.applyResultBattingDelta(env.stats, env.baseline, env.functions.totalResultBatting(env.results)), false);
-  assert.deepEqual(env.stats, before);
+
 });
 
 test('凡打を本塁打へ訂正: 通算とランキングを更新し、他選手・盗塁・投手勝利数・過去年度を維持', async () => {
@@ -140,7 +113,7 @@ test('打点だけの訂正では既存の率を再計算しない', async () =>
   }
 });
 
-test('手入力の新規登録・選手削除・試合削除を差分反映できる', async () => {
+test('共通差分計算: 選手追加・削除と試合削除を反映できる', async () => {
   const env = await existing();
   const before = clone(env.stats);
   const csv = readCsv('2026-09-13');
@@ -206,7 +179,7 @@ test('元CSVの通信失敗と不正な通算差分は保存前に検出', async
   assert.equal(env.writes.length, 0);
 });
 
-test('日付変更でも元CSVの成績を保持し、全選手を消した編集は空のboxscoreとして保存', async () => {
+test('日付変更でも元CSVの成績を保持し、個人成績の入力要素があっても読み取らない', async () => {
   const env = await existing();
   const game = env.results.groups[0].games[0];
   const values = { '.res-us': '5', '.res-them': '6', '.res-date': '2026-09-14', '.res-opponent': game.opponent, '.res-venue': game.venue };
@@ -224,11 +197,9 @@ test('日付変更でも元CSVの成績を保持し、全選手を消した編�
   assert.deepEqual(clone([...env.functions.totalResultBatting(reloaded)]), clone([...env.baseline]));
   row.dataset.bxInit = '1';
   row.querySelector = (selector) => selector === '.boxscore-panel' ? { querySelectorAll: () => [] } : { value: values[selector] };
-  const emptied = env.functions.collectCurrentGroupGames()[0];
-  assert.equal(emptied.boxscore.rows.length, 0);
-  env.results.groups[0].games[0] = emptied;
-  const removed = env.functions.totalResultBatting(env.results);
-  assert.equal(removed.get('中西').gp, env.baseline.get('中西').gp - 1);
+  const preserved = env.functions.collectCurrentGroupGames()[0];
+  assert.deepEqual(clone(preserved.boxscore), clone(collected.boxscore));
+
 });
 
 test('成績保存だけ失敗した後、同じ画面で再試行すると差分を一度だけ反映', async () => {
@@ -280,7 +251,7 @@ test('盗塁列のない旧boxscoreも未編集保存・日付変更で盗塁を
   assert.deepEqual(clone([...env.functions.totalResultBatting(reloaded)]), clone([...baseline]));
 });
 
-test('CSVの実際の保存処理から通常保存・再編集へ移っても二重加算しない', async () => {
+test('CSV取り込み後に通常保存しても通算成績を二重加算しない', async () => {
   const env = setup();
   env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {}; applyCurrentGroupEditsToStatePrevious = () => {};');
   const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
@@ -296,84 +267,18 @@ test('CSVの実際の保存処理から通常保存・再編集へ移っても�
   assert.ok(env.run('states.results.battingBaseline'));
   await env.functions.saveResults();
   assert.deepEqual(env.files.get('data/stats.json'), importedStats);
-  const game = env.run('states.results.data.groups[0].games[0]');
-  editBoxscore(env, game, (b) => b.rows[0][b.headers.indexOf('打点')] = '1');
-  await env.functions.saveResults();
-  const old = importedStats.seasonRanking.players.find((p) => p.name === '中西');
-  const updated = env.files.get('data/stats.json').seasonRanking.players.find((p) => p.name === '中西');
-  assert.equal(updated.rbi, old.rbi + 1);
-  assert.equal(updated.gp, old.gp);
+
 });
 
 // フォーム収集→グループへの反映→GitHub保存まで実際の関数を通す。
-function bindResultsForm(env, date, edit) {
+function bindResultsForm(env) {
   const games = env.run('states.results.data.groups[0].games');
-  let editedSource;
-  const rows = games.map((game) => {
-    const [us, them] = game.score.split('-').map((s) => s.trim());
+  const rows = games.map(game => {
+    const [us, them] = game.score.split('-').map(value => value.trim());
     const values = { '.res-us': us, '.res-them': them, '.res-date': game.date, '.res-opponent': game.opponent, '.res-venue': game.venue };
-    let panel = null;
-    if (game.date === date) {
-      env.context.gameForTest = game;
-      const source = clone(env.run('resultBoxscores.get(gameForTest) || gameForTest.boxscore'));
-      editedSource = clone(source);
-      if (edit) edit(source);
-      panel = panelForBoxscore(env, source);
-    }
-    return {
-      dataset: panel ? { bxInit: '1' } : {}, _originalGame: game,
-      querySelector: (s) => s === '.boxscore-panel' ? panel : { value: values[s] },
-    };
+    return { _originalGame: game, querySelector: selector => ({ value: values[selector] }) };
   });
   env.context.document.querySelectorAll = () => rows;
-  return editedSource;
-}
-
-for (const importFirst of [false, true]) {
-  test(`${importFirst ? 'CSV取り込み後の' : ''}既存試合をフォームから修正・連続保存・再読込保存: 全通算値とランキングの一致、盗塁保持`, async () => {
-    const env = setup();
-    env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {};');
-    if (importFirst) {
-      const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
-      const imp = env.functions.buildGameImportFromCsv(csvText);
-      Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
-      Object.assign(imp, { identitySelected: true, scheduleId: null, scheduleSha: 'data/schedule.json:sha' });
-      Object.assign(imp.game, env.context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
-      env.context.importForTest = imp;
-      env.run('pendingCsvImport = importForTest;');
-      await env.run('commitCsvImport()');
-    } else {
-      await env.functions.loadResults();
-    }
-    const expected = clone(env.files.get('data/stats.json'));
-    const initialStealRanking = clone(expected.seasonRanking.categories.find((c) => c.label === '盗塁'));
-    expected.seasonRanking.players.find((p) => p.name === '大淵').rbi += 1;
-    env.functions.recomputeSeasonCategories(expected.seasonRanking);
-    const source = bindResultsForm(env, '2026-03-01', (box) => {
-      const row = box.rows.find((r) => r[box.headers.indexOf('選手名')] === '大淵');
-      const index = box.headers.indexOf('打点');
-      row[index] = String(Number(row[index]) + 1);
-    });
-    const sourceSteals = source.rows.map((r) => r[source.headers.indexOf('盗塁')]);
-    assert.ok(sourceSteals.some((n) => Number(n) > 0));
-    for (let i = 0; i < 2; i++) {
-      await env.functions.saveResults();
-      assert.notEqual(env.element('statusMsg').className, 'err', env.element('statusMsg').textContent);
-      assert.deepEqual(env.files.get('data/stats.json'), clone(expected));
-    }
-    const savedGame = env.files.get('data/results.json').groups[0].games.find((g) => g.date === '2026-03-01');
-    assert.deepEqual(savedGame.boxscore.rows.map((r) => r[savedGame.boxscore.headers.indexOf('盗塁')]), sourceSteals);
-    // 同順位内の名前の順番は既存の再計算で変わりうるため、順位・人数・値を比較する。
-    const rankedEntries = (category) => category.entries.map((entry) => ({
-      value: entry.value, names: entry.name.split('・').sort(),
-    }));
-    assert.deepEqual(rankedEntries(env.files.get('data/stats.json').seasonRanking.categories.find((c) => c.label === '盗塁')), rankedEntries(initialStealRanking));
-    await env.functions.loadResults();
-    bindResultsForm(env, '2026-03-01');
-    await env.functions.saveResults();
-    assert.deepEqual(env.files.get('data/stats.json'), clone(expected));
-    assert.equal(env.writes.filter((w) => w.name === 'data/stats.json').length, importFirst ? 2 : 1);
-  });
 }
 
 test('試合識別情報: rawCsvPathを優先し、日付訂正後も同じ元CSVで補完する', async () => {
@@ -429,4 +334,43 @@ test('公開元CSVリンク: 指定パス優先・旧形式互換・ID付き欠�
   assert.match(context.renderRawDataBlock({date:'2026-03-01'}), /data-raw-src="data\/raw-games\/2026-03-01.csv"/);
   assert.equal(context.renderRawDataBlock({date:'2026-03-01',gameId:'game-2'}), '');
   assert.equal(context.renderRawDataBlock({date:null}), '');
+});
+
+test('試合結果行に個人成績の編集UIがなく、基本情報の表示とCSV訂正案内を残す', () => {
+  const env = setup();
+  env.context.document.createElement = () => ({
+    innerHTML: '', dataset: {}, querySelector: () => ({ addEventListener() {} }),
+  });
+  env.context.testGame = readJson('results.json').groups[0].games[0];
+  const row = env.run("makeResultRow(testGame, 'current')");
+  assert.match(row.innerHTML, /対戦相手/);
+  assert.match(row.innerHTML, /得点/);
+  assert.doesNotMatch(row.innerHTML, /個人成績を編集|個人成績を入力|boxscore-panel|toggle-boxscore|bx-/);
+  const html = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
+  assert.match(html, /記録の訂正はCSV取り込み → 既存試合の差し替えから行ってください/);
+  for (const name of ['initBoxscorePanel', 'collectBoxscoreFromRow', 'reconstructAtBatsFromRow', 'addPlayerCard', 'addAtBatRow', 'ensureRosterNamesLoaded']) {
+    assert.equal(env.run(`typeof ${name}`), 'undefined');
+  }
+});
+
+test('既存boxscoreのある試合を通常保存しても成績と識別情報をそのまま保持', async () => {
+  const env = setup();
+  const data = env.files.get('data/results.json');
+  const game = data.groups[0].games[0];
+  game.boxscore = clone(env.functions.buildGameImportFromCsv(readCsv('2026-09-13')).game.boxscore);
+  game.gameId = '2026-09-13-01';
+  game.rawCsvPath = 'data/raw-games/2026-09-13.csv';
+  const beforeBox = clone(game.boxscore);
+  const beforeStats = clone(env.files.get('data/stats.json'));
+  env.run('renderResultsGroupSelect = () => {}; renderResultsGameList = () => {};');
+  await env.functions.loadResults();
+  bindResultsForm(env);
+  await env.functions.saveResults();
+  await env.functions.saveResults();
+  const saved = env.files.get('data/results.json').groups[0].games[0];
+  assert.deepEqual(saved.boxscore, beforeBox);
+  assert.equal(saved.gameId, game.gameId);
+  assert.equal(saved.rawCsvPath, game.rawCsvPath);
+  assert.deepEqual(env.files.get('data/stats.json'), beforeStats);
+  assert.ok(env.writes.every(write => write.name === 'data/results.json'));
 });
