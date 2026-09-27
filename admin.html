@@ -671,10 +671,11 @@
       <div id="draftListArea" style="margin-top:1rem;"></div>
     </section>
 
-    <p class="admin-note">試合終了後は、未終了の試合を日付・開始時刻順にセットします。同日に複数試合ある場合は、日程にそれぞれ異なる開始時刻を設定してください。</p>
+    <p class="admin-note">試合終了後は、未終了の試合を日付・開始時刻順にセットします。同日に複数試合ある場合は、日程にそれぞれ異なる開始時刻を設定してください。雨天延期は「雨天中止」で処理し、振替は試合日程の「+ 試合を追加」から新しく登録してください。元日程の日付を書き換えて振替にしないでください。</p>
     <div class="admin-actions">
       <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">公開する</button>
       <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終了(履歴に保存し、次の試合を自動セット)</button>
+      <button type="button" class="admin-btn admin-btn-outline" id="cancelGameBtn">この試合を雨天中止（次の試合へ）</button>
     </div>
   </div>
 
@@ -1468,13 +1469,20 @@ function completedScheduleIds(results, history) {
   ].filter(Boolean);
 }
 
-async function archiveAndClear() {
-  if (!confirm('現在の次戦情報を履歴に保存し、試合日程から次の試合を自動セットします。よろしいですか?')) return;
+async function archiveAndClear(action) {
+  const cancelled = action === 'cancelled';
+  if (!confirm(cancelled
+    ? '現在公開中の次戦を雨天中止として保存し、次の未終了試合へ進みます。振替は新しい日程として登録してください。よろしいですか?'
+    : '現在の次戦情報を履歴に保存し、試合日程から次の試合を自動セットします。よろしいですか?')) return;
   const btn = document.getElementById('archiveBtn');
+  const cancelBtn = document.getElementById('cancelGameBtn');
+  if (btn.disabled || cancelBtn.disabled) return;
   btn.disabled = true;
+  cancelBtn.disabled = true;
   showStatus('loading', '履歴に保存中...');
   try {
-    const current = collectNextGameForm();
+    const current = cancelled ? { ...states.nextGame.data.current } : collectNextGameForm();
+    delete current.attendance;
     current.updatedAt = new Date().toISOString();
     const data = states.nextGame.data;
     const history = data.history || [];
@@ -1489,7 +1497,11 @@ async function archiveAndClear() {
     else if ((scheduleData.games || []).some(game => game.date === savedCurrent.date)) {
       throw new Error('終了する試合の日程IDを一意に特定できません。次戦と日程の紐付けを確認してください。');
     }
-    const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
+    if (cancelled) {
+      if (!current.scheduleGameId || !currentGame) throw new Error('中止する試合の日程IDを特定できません。次戦と日程の紐付けを確認してください。');
+      if (completedScheduleIds(resultsData, history).includes(current.scheduleGameId)) throw new Error('この試合は既に終了または中止として記録されています。');
+    }
+    const newHistory = [...history, { ...current, ...(cancelled ? { status: 'cancelled', cancellationReason: '雨天中止' } : {}), archivedAt: new Date().toISOString() }];
     const nextGame = findNextScheduledGame(scheduleData, completedScheduleIds(resultsData, newHistory));
 
     const blankCurrent = nextGame
@@ -1497,17 +1509,18 @@ async function archiveAndClear() {
       : { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     if (nextGame && nextGame.id) blankCurrent.scheduleGameId = nextGame.id;
     const newData = { current: blankCurrent, drafts: data.drafts || [], defaultOrder: data.defaultOrder || null, history: newHistory };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
+    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, cancelled ? '雨天中止: 試合IDを履歴に保存し、次の試合をセット' : '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
     states.nextGame = { sha: json.content.sha, data: newData };
     fillNextGameForm(blankCurrent);
     renderNextGameStatus();
     showStatus('ok', nextGame
-      ? `履歴に保存し、次の試合(${nextGame.opponent})を自動セットしました。集合時間だけ入力して公開してください。`
-      : '履歴に保存しました。試合日程に次の試合が見つからなかったため、フォームは空のままです。');
+      ? `${cancelled ? '雨天中止として' : ''}履歴に保存し、次の試合(${nextGame.opponent})を自動セットしました。集合時間だけ入力して公開してください。`
+      : `${cancelled ? '雨天中止として' : ''}履歴に保存しました。試合日程に次の試合が見つからなかったため、フォームは空のままです。`);
   } catch (e) {
     showStatus('err', e.message || String(e));
   } finally {
     btn.disabled = false;
+    cancelBtn.disabled = false;
   }
 }
 
@@ -1523,6 +1536,7 @@ document.getElementById('saveDefaultOrderBtn').addEventListener('click', saveDef
 document.getElementById('saveDraftBtn').addEventListener('click', saveDraft);
 document.getElementById('saveBtn').addEventListener('click', saveCurrent);
 document.getElementById('archiveBtn').addEventListener('click', archiveAndClear);
+document.getElementById('cancelGameBtn').addEventListener('click', () => archiveAndClear('cancelled'));
 
 /* ================== 共通: 日付の曜日表示 ================== */
 

@@ -362,3 +362,81 @@ test('結果取得失敗・次戦SHA競合では切替前の状態を維持', as
     assert.deepEqual(clone(env.run('states.nextGame.data')), before);
   }
 });
+
+test('次戦を雨天中止すると次の日程へ進み、中止状態とIDを同時保存する', async () => {
+  const env = switchingSetup(1);
+  await env.node('cancelGameBtn').events.click();
+  assert.equal(env.writes.length, 1);
+  const saved = env.writes[0];
+  assert.equal(saved.file, 'data/next-game.json');
+  assert.equal(saved.sha, 'next-sha');
+  assert.equal(saved.data.current.scheduleGameId, 'tomorrow');
+  assert.equal(saved.data.history.at(-1).scheduleGameId, 'double-1');
+  assert.equal(saved.data.history.at(-1).status, 'cancelled');
+  assert.equal(saved.data.history.at(-1).cancellationReason, '雨天中止');
+  assert.ok(saved.data.history.at(-1).archivedAt);
+});
+
+test('同日第1試合の中止で第2試合へ進み、全試合中止後は翌日へ・参加者は引き継がない', async () => {
+  const env = switchingSetup(2, true);
+  const scheduleBefore = clone(env.schedule);
+  await env.run("archiveAndClear('cancelled')");
+  let current = env.writes.at(-1).data.current;
+  assert.equal(current.scheduleGameId, 'double-2');
+  assert.match(publicRender(current, env.schedule), /参加者2/);
+  assert.doesNotMatch(publicRender(current, env.schedule), /参加者1/);
+  assert.ok(!('attendance' in current));
+  await env.run("archiveAndClear('cancelled')");
+  current = env.writes.at(-1).data.current;
+  assert.equal(current.scheduleGameId, 'tomorrow');
+  assert.doesNotMatch(publicRender(current, env.schedule), /参加者[12]/);
+  assert.deepEqual(env.writes.at(-1).data.history.map(game => game.status), ['cancelled', 'cancelled']);
+  assert.deepEqual(env.schedule, scheduleBefore);
+  assert.deepEqual(env.results, { groups: [] });
+});
+
+test('中止履歴は通常終了後にも除外され、同日中止試合へ戻らない', async () => {
+  const env = switchingSetup(3);
+  await env.run("archiveAndClear('cancelled')");
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes.at(-1).data.current.scheduleGameId, 'double-3');
+  assert.equal(env.writes.at(-1).data.history[0].status, 'cancelled');
+  assert.ok(!env.writes.at(-1).data.history[1].status);
+});
+
+test('振替の新規日程は別ID、参加者・球場・時刻を元日程からコピーしない', () => {
+  const env = switchingSetup();
+  const rows = [{ _originalGame: {}, querySelector: selector => ({ value: {
+    '.sch-date': '2026-10-11', '.sch-opponent': '相手1', '.sch-location': '', '.sch-time': '',
+  }[selector] }) }];
+  env.ctx.document.querySelectorAll = () => rows;
+  const replacement = env.run('collectSchedule()')[0];
+  assert.match(replacement.id, /^schedule-/);
+  assert.ok(env.schedule.games.every(game => game.id !== replacement.id));
+  assert.equal(replacement.location, null);
+  assert.equal(replacement.time, null);
+  assert.ok(!('attendance' in replacement));
+});
+
+test('中止保存のSHA競合・順序不明では中止も次戦切替も反映しない', async () => {
+  for (const conflict of [true, false]) {
+    const env = switchingSetup(3);
+    const before = clone(env.run('states.nextGame.data'));
+    if (conflict) env.ctx.ghPut = async () => { throw new Error('409'); };
+    else env.schedule.games[1].time = null;
+    await env.run("archiveAndClear('cancelled')");
+    assert.equal(env.writes.length, 0);
+    assert.deepEqual(clone(env.run('states.nextGame.data')), before);
+    assert.equal(env.node('cancelGameBtn').disabled, false);
+  }
+});
+
+test('試合ID不明・結果登録済みの試合は中止として記録しない', async () => {
+  for (const completed of [true, false]) {
+    const env = switchingSetup(2, true);
+    if (completed) env.results.groups = [{ games: [{ gameId: 'double-1' }] }];
+    else env.run('delete states.nextGame.data.current.scheduleGameId;');
+    await env.run("archiveAndClear('cancelled')");
+    assert.equal(env.writes.length, 0);
+  }
+});
