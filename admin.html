@@ -624,7 +624,9 @@
       </div>
       <p id="attendanceEditorStatus" class="admin-note" role="status"></p>
       <button type="button" class="admin-btn admin-btn-primary" id="saveAttendanceBtn" disabled>参加予定を公開・更新</button>
-      <p class="admin-note">打順・守備位置は任意です。スタメンへ自動同期しません。案の作成には保存済みの参加予定を使います。</p>
+      <p class="admin-note">打順・守備位置はこの端末のブラウザだけに保存します。別端末とは共有されず、ブラウザの保存データを削除すると失われます。参加予定の公開・更新時にも端末へ保存します。旧公開データの打順・守備は読み込まないため、必要なら再入力してください。</p>
+      <button type="button" class="admin-btn admin-btn-secondary" id="saveAttendancePlanBtn" disabled>仮オーダーをこの端末に保存</button>
+      <p class="admin-note">スタメン案は保存済みの参加予定と端末内の仮オーダーから作成します。コピーだけでは公開しません。コピー先の「下書き保存」は公開JSONに保存されるため、非公開ではありません。</p>
       <button type="button" class="admin-btn admin-btn-secondary" id="attendanceLineupBtn" hidden>参加予定からスタメン案を作成</button>
     </section>
   </div>
@@ -969,6 +971,58 @@ function attendanceMemberKey(member) {
   return JSON.stringify([member.name, member.number]);
 }
 
+// 公開参加予定と仮オーダーを分離。旧公開JSONの仮オーダーは使用しない。
+function publicAttendance(attendance) {
+  if (!attendance) return attendance;
+  return { ...attendance, members: (attendance.members || []).map(member => ({ name: member.name, number: member.number ?? '' })) };
+}
+function publicSchedule(data) {
+  return { ...data, games: data.games.map(game => game.attendance
+    ? { ...game, attendance: publicAttendance(game.attendance) } : game) };
+}
+function attendancePlanKey(gameId) {
+  if (!gameId) throw new Error('仮オーダーの保存には試合IDが必要です。');
+  return 'ffhp_attendance_plan_v1:' + JSON.stringify([CONFIG.owner, CONFIG.repo, CONFIG.branch, gameId]);
+}
+function readAttendancePlan(gameId) {
+  try {
+    const raw = localStorage.getItem(attendancePlanKey(gameId));
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (data.version !== 1 || data.gameId !== gameId || !Array.isArray(data.members) || data.members.some(member =>
+      !member || typeof member.name !== 'string' || typeof member.number !== 'string' ||
+      (member.order !== undefined && (!Number.isSafeInteger(member.order) || member.order < 1)) ||
+      (member.position !== undefined && typeof member.position !== 'string'))) throw new Error('形式不正');
+    return data.members;
+  } catch (error) { throw new Error('端末内の仮オーダーを読み込めません。公開JSONへの代替保存は行いません。'); }
+}
+function attendanceWithLocalPlan(gameId, attendance) {
+  const plan = readAttendancePlan(gameId);
+  const members = publicAttendance(attendance)?.members || [];
+  return { members: members.map(member => {
+    const key = attendanceMemberKey(member);
+    const matches = plan.filter(item => attendanceMemberKey(item) === key);
+    // 名前だけ・背番号だけでは照合しない。重複も曖昧なので適用しない。
+    const saved = matches.length === 1 && members.filter(item => attendanceMemberKey(item) === key).length === 1 ? matches[0] : null;
+    return { ...member, ...(saved?.order !== undefined ? { order: saved.order } : {}), ...(saved?.position ? { position: saved.position } : {}) };
+  }) };
+}
+function writeAttendancePlan(gameId, members) {
+  readAttendancePlan(gameId); // 読み取り不能な保存内容を黙って上書きしない。
+  try {
+    localStorage.setItem(attendancePlanKey(gameId), JSON.stringify({ version: 1, gameId, members, updatedAt: new Date().toISOString() }));
+  } catch (error) { throw new Error('仮オーダーを端末に保存できませんでした。公開JSONへの代替保存は行いません。'); }
+}
+function saveAttendancePlan() {
+  try {
+    const game = selectedAttendanceGame();
+    if (!attendanceReady || !game?.id) return;
+    writeAttendancePlan(game.id, collectAttendanceMembers());
+    showStatus('ok', '仮オーダーをこの端末に保存しました。参加予定やスタメンは公開していません。');
+  } catch (error) { showStatus('err', error.message); }
+}
+document.getElementById('saveAttendancePlanBtn').addEventListener('click', saveAttendancePlan);
+
 function buildAttendanceOptions(roster, attendance) {
   const options = new Map();
   const add = (member, selected) => {
@@ -1017,6 +1071,7 @@ function updateAttendanceSummary() {
   document.getElementById('attendanceCount').textContent = `選択中：${attendanceOptions.filter(p => p.selected).length}人`;
   document.getElementById('saveAttendanceBtn').disabled = !attendanceReady || !game || !game.date;
   document.getElementById('addAttendanceGuestBtn').disabled = !attendanceReady || !game;
+  document.getElementById('saveAttendancePlanBtn').disabled = !attendanceReady || !game?.id;
   document.getElementById('attendanceLineupBtn').hidden = !attendanceReady || !game?.id || game.id !== attendanceLegacyCurrent?.scheduleGameId;
 }
 
@@ -1031,10 +1086,16 @@ function renderAttendanceOptions() {
 
 function resetAttendanceEditor() {
   const game = selectedAttendanceGame();
-  attendanceOptions = game ? buildAttendanceOptions(attendanceRoster, scheduleGameAttendance(game, states.schedule.data.games, attendanceLegacyCurrent)) : [];
+  let attendance = game && publicAttendance(scheduleGameAttendance(game, states.schedule.data.games, attendanceLegacyCurrent));
+  let localError = '';
+  if (game) {
+    try { attendance = attendanceWithLocalPlan(game.id, attendance); }
+    catch (error) { localError = error.message; }
+  }
+  attendanceOptions = game ? buildAttendanceOptions(attendanceRoster, attendance) : [];
   document.getElementById('attendanceGuestName').value = '';
   document.getElementById('attendanceGuestNumber').value = '';
-  document.getElementById('attendanceEditorStatus').textContent = '';
+  document.getElementById('attendanceEditorStatus').textContent = localError;
   renderAttendanceOptions();
 }
 
@@ -1098,16 +1159,19 @@ async function saveAttendance() {
   try {
     const state = states.schedule;
     const index = state.data.games.indexOf(game);
-    const attendance = { members: collectAttendanceMembers(), updatedAt: new Date().toISOString() };
+    const members = collectAttendanceMembers();
+    writeAttendancePlan(game.id, members);
+    const attendance = publicAttendance({ members, updatedAt: new Date().toISOString() });
     const games = state.data.games.map((item, i) => i === index ? { ...item, attendance } : item);
-    const newData = { ...state.data, games };
+    const newData = publicSchedule({ ...state.data, games });
     const json = await ghPut(FILES.schedule, newData, state.sha, `参加予定メンバーを公開: ${game.date} ${game.opponent}`);
     states.schedule = { sha: json.content.sha, data: newData };
     // 日程フォームの未保存入力を維持し、次の日程保存で参加予定を巻き戻さない。
     document.querySelectorAll('#scheduleRows .entry-row').forEach(row => {
-      if (row._originalGame === game) row._originalGame = games[index];
+      const rowIndex = state.data.games.indexOf(row._originalGame);
+      if (rowIndex >= 0) row._originalGame = newData.games[rowIndex];
     });
-    showStatus('ok', '対象試合の参加予定を公開しました。日付・場所・スタメンは変更していません。');
+    showStatus('ok', '対象試合の参加予定を公開し、仮オーダーはこの端末に保存しました。スタメンは変更していません。');
   } catch (e) {
     showStatus('err', e.message || String(e));
   } finally {
@@ -1137,13 +1201,14 @@ async function copyAttendanceLineup() {
     const game = matches[0];
     if (!game.attendance) throw new Error('参加予定を先に保存してください。');
     if (states.nextGame && states.nextGame.data.current?.scheduleGameId !== selectedId) throw new Error('次戦画面の対象が古くなっています。次戦情報を再読み込みしてください。');
+    const lineup = lineupFromAttendance(attendanceWithLocalPlan(game.id, game.attendance));
     if (!confirm(`${game.date} ${game.opponent}\n保存済み参加予定からスタメン案を作成します。現在のスタメン予定（未保存の入力を含む）を上書きします。公開はまだ行いません。よろしいですか？`)) return;
     if (!states.nextGame) {
       states.nextGame = { data: next, sha: nextJson.sha };
       fillNextGameForm(next.current);
     }
     tabsLoaded.nextgame = true;
-    renderLineup(lineupFromAttendance(game.attendance));
+    renderLineup(lineup);
     document.querySelector('[data-tab="nextgame"]').click();
     // タブ読込による案の上書きを避ける。
     showStatus('ok', 'スタメン案を作成しました。内容を確認し、下書き保存または公開してください。参加予定は変更していません。');
@@ -1623,7 +1688,7 @@ async function saveSchedule() {
   showStatus('loading', '保存中...');
   try {
     const selectedId = selectedAttendanceGame() && selectedAttendanceGame().id;
-    const newData = { ...states.schedule.data, games: collectSchedule() };
+    const newData = publicSchedule({ ...states.schedule.data, games: collectSchedule() });
     const json = await ghPut(FILES.schedule, newData, states.schedule.sha, '試合日程を更新');
     states.schedule = { sha: json.content.sha, data: newData };
     renderSchedule(newData.games);

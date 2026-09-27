@@ -14,6 +14,7 @@ const shared = fs.readFileSync(path.join(root, 'game-attendance.js'), 'utf8');
 const fixtureAttendance = { members: [{ name: '井口', number: '1' }, { name: '助っ人', number: '' }], updatedAt: '2026-09-23T10:00:00Z' };
 function setup(attendance = fixtureAttendance) {
   const nodes = new Map();
+  const storage = new Map();
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', innerHTML: '', textContent: '', disabled: false, dataset: {}, style: {}, events: {},
       addEventListener(event, callback) { this.events[event] = callback; }, querySelectorAll() { return []; } });
@@ -21,7 +22,7 @@ function setup(attendance = fixtureAttendance) {
   };
   const ctx = vm.createContext({
     document: { getElementById: node, querySelectorAll: () => [] },
-    localStorage: { getItem: () => '' }, TextEncoder, TextDecoder, crypto,
+    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }, TextEncoder, TextDecoder, crypto,
     atob: text => Buffer.from(text, 'base64').toString('binary'), btoa: text => Buffer.from(text, 'binary').toString('base64'),
     confirm: () => true, fetch: () => { throw new Error('Unexpected network'); },
   });
@@ -39,7 +40,7 @@ function setup(attendance = fixtureAttendance) {
   const writes = [];
   ctx.ghGet = async file => ({ sha: 'read-sha', content: Buffer.from(JSON.stringify(file.endsWith('next-game.json') ? original : file.endsWith('players.json') ? read('players.json') : file.endsWith('results.json') ? read('results.json') : schedule)).toString('base64') });
   ctx.ghPut = async (file, data, sha, message) => { writes.push({ file, data: clone(data), sha, message }); return { content: { sha: 'new-sha' } }; };
-  return { ctx, run, node, original, schedule, writes, state: () => run('states.schedule'), select: name => {
+  return { ctx, run, node, original, schedule, writes, storage, state: () => run('states.schedule'), select: name => {
     ctx.selectedName = name; run('attendanceOptions.find(p => p.name === selectedName).selected = true;');
   } };
 }
@@ -556,19 +557,21 @@ test('次戦なしの確認は空になることを明示し、終了操作は�
   assert.match(html, /<details class="transition-actions"><summary>試合を終了・中止する<\/summary>[\s\S]*?id="archiveBtn"[\s\S]*?id="cancelGameBtn"[\s\S]*?<\/details>/);
 });
 
-test('参加予定の任意打順・守備を保存し旧データと助っ人も保持、次戦は変更しない', async () => {
+test('参加予定の打順・守備は端末だけに保存し公開参加者と助っ人を保持、次戦は変更しない', async () => {
   const env = setup();
   await env.run('loadAttendanceEditor()');
   env.run("attendanceOptions.find(p => p.name === '井口').order = '2'; attendanceOptions.find(p => p.name === '井口').position = '捕';");
   await env.run('saveAttendance()');
   const member = env.writes[0].data.games[0].attendance.members.find(p => p.name === '井口');
-  assert.equal(member.order, 2); assert.equal(member.position, '捕');
+  assert.ok(!('order' in member)); assert.ok(!('position' in member));
+  const local = env.run('readAttendancePlan(selectedAttendanceGame().id)').find(p => p.name === '井口');
+  assert.equal(local.order, 2); assert.equal(local.position, '捕');
   const guest = env.writes[0].data.games[0].attendance.members.find(p => p.name === '助っ人');
   assert.ok(!('order' in guest)); assert.ok(!('position' in guest));
   assert.ok(env.writes.every(write => write.file === 'data/schedule.json'));
 });
 
-test('参加予定を再読込しても名簿との統合で打順・守備を失わない', () => {
+test('端末データ結合済みの参加予定は名簿との統合で打順・守備を失わない', () => {
   const env = setup();
   const options = env.ctx.buildAttendanceOptions([{ name: '井口', number: '1' }], { members: [{ name: '井口', number: '1', order: 3, position: '遊' }] });
   assert.equal(options[0].order, 3); assert.equal(options[0].position, '遊');
@@ -691,3 +694,109 @@ for (const action of ['', 'cancelled']) {
     assert.ok(!('defaultOrder' in env.remoteNext));
   });
 }
+
+test('端末保存は試合IDごとに独立し、再読込時は公開参加者にだけ仮オーダーを結合', async () => {
+  const env = setup(); await env.run('loadAttendanceEditor()');
+  env.run("attendanceOptions.find(p => p.name === '井口').order = 3; attendanceOptions.find(p => p.name === '井口').position = '遊'; saveAttendancePlan();");
+  assert.equal(env.writes.length, 0);
+  env.run('resetAttendanceEditor()');
+  assert.equal(env.run("attendanceOptions.find(p => p.name === '井口').order"), 3);
+  env.node('attendanceGameSelect').value = '1'; env.run('resetAttendanceEditor()');
+  assert.equal(env.run("attendanceOptions.find(p => p.name === '井口').order ?? ''"), '');
+  env.run("attendanceOptions.find(p => p.name === '井口').selected = true; attendanceOptions.find(p => p.name === '井口').order = 5; saveAttendancePlan();");
+  env.node('attendanceGameSelect').value = '0'; env.run('resetAttendanceEditor()');
+  assert.equal(env.run("attendanceOptions.find(p => p.name === '井口').order"), 3);
+  assert.equal(env.storage.size, 2);
+});
+
+test('公開JSONの旧仮オーダーは読まず、端末未設定なら空欄。全試合の旧フィールドは参加予定保存で除去', async () => {
+  const legacy = { members: [{ name: '井口', number: '1', order: 9, position: '投' }], updatedAt: 'old' };
+  const env = setup(legacy);
+  env.schedule.games[1].attendance = clone(legacy);
+  env.run('states.schedule.data.games[1].attendance = initialSchedule.games[0].attendance;');
+  await env.run('loadAttendanceEditor()');
+  assert.equal(env.run("attendanceOptions.find(p => p.name === '井口').order"), '');
+  assert.equal(env.run("attendanceOptions.find(p => p.name === '井口').position"), '');
+  await env.run('saveAttendance()');
+  for (const game of env.writes[0].data.games) {
+    for (const member of game.attendance?.members || []) assert.deepEqual(Object.keys(member).sort(), ['name', 'number']);
+  }
+});
+
+test('通常の日程保存も旧仮オーダーを全て除去し、他の日程情報は保持', async () => {
+  const env = setup({ members: [{ name: '井口', number: '1', order: 2, position: '捕' }], updatedAt: 'old' });
+  env.ctx.collectSchedule = () => clone(env.schedule.games);
+  const before = clone(env.schedule);
+  await env.run('saveSchedule()');
+  assert.equal(env.writes.length, 1);
+  const expected = clone(before);
+  delete expected.games[0].attendance.members[0].order;
+  delete expected.games[0].attendance.members[0].position;
+  assert.deepEqual(env.writes[0].data, expected);
+  assert.deepEqual(env.schedule, before);
+});
+
+test('名前または背番号の変更・参加除外・曖昧な重複は古い仮オーダーを適用しない', () => {
+  const env = setup();
+  env.run("writeAttendancePlan('game-a', [{ name: '選手', number: '1', order: 4, position: '三' }]);");
+  for (const members of [[{name:'別人',number:'1'}], [{name:'選手',number:'2'}], [], [{name:'選手',number:'1'},{name:'選手',number:'1'}]]) {
+    env.ctx.membersToMatch = members;
+    const result = clone(env.run("attendanceWithLocalPlan('game-a', { members: membersToMatch })"));
+    assert.deepEqual(result.members, members);
+  }
+  env.run("writeAttendancePlan('game-a', [{ name: '選手', number: '1', order: 4 }, { name: '選手', number: '1', order: 5 }]);");
+  assert.deepEqual(clone(env.run("attendanceWithLocalPlan('game-a', {members:[{name:'選手',number:'1'}]}).members")), [{name:'選手',number:'1'}]);
+});
+
+test('案作成は最新の公開参加者＋保存済み端末オーダーを使い、旧公開オーダーは使わずフォームだけ変更', async () => {
+  const env = setup({ members: [{name:'井口',number:'1',order:9,position:'投'}, {name:'助っ人',number:'',order:8,position:'左'}] });
+  await env.run('loadAttendanceEditor()');
+  env.run("writeAttendancePlan(selectedAttendanceGame().id, [{name:'井口',number:'1',order:2,position:'捕'}, {name:'除外済み',number:'99',order:1}]); copiedLineup=null; renderLineup=players=>{copiedLineup=players;};");
+  env.ctx.document.querySelector = () => ({click(){}});
+  const nextBefore = clone(env.run('states.nextGame.data'));
+  await env.run('copyAttendanceLineup()');
+  assert.deepEqual(clone(env.run('copiedLineup')), [
+    {name:'井口',number:'1',order:2,position:'捕',comment:''},
+    {name:'助っ人',number:'',order:'',position:'',comment:''},
+  ]);
+  assert.equal(env.writes.length, 0);
+  assert.deepEqual(clone(env.run('states.nextGame.data')), nextBefore);
+});
+
+for (const failure of ['read', 'invalid-json', 'write']) test(`端末保存障害(${failure})でも仮オーダーを公開JSONへ代替保存しない`, async () => {
+  const env = setup({members:[{name:'井口',number:'1',order:9,position:'投'}]});
+  if (failure === 'read') env.ctx.localStorage.getItem = () => { throw new Error('blocked'); };
+  if (failure === 'invalid-json') env.storage.set(env.run('attendancePlanKey(selectedAttendanceGame().id)'), '{broken');
+  if (failure === 'write') env.ctx.localStorage.setItem = () => { throw new Error('quota'); };
+  await env.run('loadAttendanceEditor()');
+  assert.equal(env.run("attendanceOptions.find(p=>p.name==='井口').order"), '');
+  if (failure !== 'write') assert.match(env.node('attendanceEditorStatus').textContent, /読み込めません/);
+  env.run("attendanceOptions.find(p=>p.name==='井口').order=3;");
+  await env.run('saveAttendance()');
+  assert.equal(env.writes.length, 0);
+  assert.match(env.node('statusMsg').textContent, /代替保存は行いません/);
+  if (failure !== 'write') {
+    let rendered = false; env.ctx.renderLineup = () => { rendered = true; };
+    env.ctx.document.querySelector = () => ({click(){}});
+    await env.run('copyAttendanceLineup()');
+    assert.equal(rendered, false);
+  }
+});
+
+test('参加選択解除を端末保存するとその人の仮オーダーも除去', async () => {
+  const env = setup(); await env.run('loadAttendanceEditor()');
+  env.run("attendanceOptions.find(p=>p.name==='井口').order=3; saveAttendancePlan(); attendanceOptions.find(p=>p.name==='井口').selected=false; saveAttendancePlan();");
+  assert.ok(!env.run('readAttendancePlan(selectedAttendanceGame().id)').some(p => p.name === '井口'));
+});
+
+test('参加予定を続けて保存しても日程フォームの参照を更新し、後の日程保存で巻き戻さない', async () => {
+  const env = setup(); await env.run('loadAttendanceEditor()');
+  const row = { _originalGame: env.run('states.schedule.data.games[0]') };
+  env.ctx.document.querySelectorAll = selector => selector === '#scheduleRows .entry-row' ? [row] : [];
+  env.select('古賀'); await env.run('saveAttendance()');
+  assert.equal(row._originalGame, env.run('states.schedule.data.games[0]'));
+  env.run("attendanceOptions.find(p=>p.name==='井口').selected=false;");
+  await env.run('saveAttendance()');
+  assert.equal(row._originalGame, env.run('states.schedule.data.games[0]'));
+  assert.ok(!row._originalGame.attendance.members.some(p=>p.name==='井口'));
+});
