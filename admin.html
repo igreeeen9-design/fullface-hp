@@ -2472,14 +2472,14 @@ function updateBattingRates(rec) {
 }
 
 // 同じ数値のプレイヤーは「・」でつないで1行にまとめる(既存データの表記に合わせた仕様)。
-// minValueに満たない数値の選手はランキング対象外にする(既定は1=0を除外するだけ)。
+// minValueを指定した場合はそれに満たない選手を対象外にし、未指定なら0以下だけを除外する。
+// (未指定時の下限を1にすると、打率.360など1未満の率系ランキングが全員除外されてしまう)
 function mergeTiesIntoTopRows(sorted, valueFn, formatFn, minValue) {
-  const min = minValue == null ? 1 : minValue;
   const rows = [];
   let i = 0;
   while (i < sorted.length && rows.length < 5) {
     const v = valueFn(sorted[i]);
-    if (v < min) break;
+    if (minValue == null ? v <= 0 : v < minValue) break;
     const names = [];
     while (i < sorted.length && valueFn(sorted[i]) === v) { names.push(sorted[i].name); i++; }
     rows.push({ name: names.join('・'), value: formatFn(v) });
