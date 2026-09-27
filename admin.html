@@ -416,8 +416,12 @@
     margin-top: 0.3rem;
   }
 /* 参加確定メンバー */
-.attendance-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; }
-.attendance-option { display: flex; align-items: center; gap: 0.65rem; padding: 0.7rem; border: 1px solid #dde3e6; border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; }
+.attendance-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 0.5rem; }
+.attendance-member { min-width: 0; padding: 0.75rem; border: 1px solid #dde3e6; border-radius: 8px; background: white; }
+.attendance-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem; }
+.attendance-fields label { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; font-size: 0.85rem; color: var(--navy); }
+.attendance-fields input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 0.5rem; border: 1px solid #c9d0d4; border-radius: 6px; font-size: 16px; }
+.attendance-option { display: flex; align-items: center; gap: 0.65rem; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
 .attendance-option input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin: 0; }
 .attendance-guest { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: end; margin-top: 1rem; }
 .attendance-guest > div { flex: 1 1 130px; min-width: 0; }
@@ -1077,10 +1081,10 @@ function updateAttendanceSummary() {
 
 function renderAttendanceOptions() {
   document.getElementById('attendanceOptions').innerHTML = attendanceOptions.map((p, i) => `
-    <div><label class="attendance-option"><input type="checkbox" data-attendance-index="${i}" ${p.selected ? 'checked' : ''}>
+    <div class="attendance-member"><label class="attendance-option"><input type="checkbox" data-attendance-index="${i}" ${p.selected ? 'checked' : ''}>
       <span>${escapeAttr(p.name)}${p.number ? `［${escapeAttr(p.number)}］` : ''}</span></label>
-      <label>打順（任意）<input type="number" min="1" step="1" data-attendance-field="order" data-member-index="${i}" value="${escapeAttr(p.order ?? '')}" style="width:5rem"></label>
-      <label>守備（任意）<input type="text" list="positionOptions" data-attendance-field="position" data-member-index="${i}" value="${escapeAttr(p.position || '')}" style="width:6rem"></label></div>`).join('');
+      <div class="attendance-fields"><label>打順（任意）<input type="number" min="1" step="1" data-attendance-field="order" data-member-index="${i}" value="${escapeAttr(p.order ?? '')}" placeholder="未設定"></label>
+      <label>守備位置（任意）<input type="text" list="positionOptions" data-attendance-field="position" data-member-index="${i}" value="${escapeAttr(p.position || '')}" placeholder="未設定"></label></div></div>`).join('');
   updateAttendanceSummary();
 }
 
