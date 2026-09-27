@@ -21,11 +21,14 @@ function setup() {
     btoa: (v) => Buffer.from(v, 'binary').toString('base64'), atob: (v) => Buffer.from(v, 'base64').toString('binary') });
   vm.runInContext(script.slice(0, script.lastIndexOf('refreshTokenUI();\nrefreshGcTokenUI();')), context);
   const files = new Map(['results.json', 'stats.json'].map((name) => ['data/' + name, read(name)]));
+  files.set('data/schedule.json', { games: [] });
   const mock = installGitHub(context, files);
   const csvText = fs.readFileSync(path.join(fixtures, 'raw-games/2026-09-13.csv'), 'utf8').replace('9/13,', '9/27,');
   const imp = context.buildGameImportFromCsv(csvText);
   Object.assign(imp, { csvText, resultsData: read('results.json'), statsData: read('stats.json'),
-    resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha' });
+    resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha',
+    identitySelected: true, scheduleId: null, scheduleSha: 'data/schedule.json:sha' });
+  Object.assign(imp.game, context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
   return { context, files, mock, imp, element };
 }
 
@@ -40,14 +43,14 @@ test('通常取り込み: 3ファイルを一括公開し、従来の成績・�
   await c.saveCsvImport(imp);
   assert.deepEqual(files.get('data/results.json'), clone(expectedResults));
   assert.deepEqual(files.get('data/stats.json'), clone(expectedStats));
-  assert.equal(files.get('data/raw-games/2026-09-27.csv'), imp.csvText);
+  assert.equal(files.get('data/raw-games/2026-09-27-01.csv'), imp.csvText);
   assert.equal(mock.publications, 1);
   assert.deepEqual(clone({ ...imp, attempt: undefined }), before);
   assert.equal(mock.calls.filter((x) => x.route === 'git/commits').length, 1);
   await c.saveCsvImport(imp);
   assert.equal(mock.publications, 1);
-  // 再解析した同一CSVも日付重複で停止し、再加算しない。
-  await assert.rejects(c.saveCsvImport({ ...before }), /同じ日付/);
+  // 同一gameIdで再保存しても重複で停止し、再加算しない。
+  await assert.rejects(c.saveCsvImport({ ...before }), /同じgameId/);
   assert.deepEqual(files.get('data/stats.json'), clone(expectedStats));
 });
 
@@ -154,11 +157,11 @@ test('画面: 元CSV失敗は成功表示せず再試行可能、成功時だけ
 
 test('元CSVが既に存在する場合は上書きせず、コミット作成前に停止', async () => {
   const { context: c, imp, files } = setup();
-  files.set('data/raw-games/2026-09-27.csv', 'existing csv');
+  files.set('data/raw-games/2026-09-27-01.csv', 'existing csv');
   const mock = installGitHub(c, files);
   await assert.rejects(c.saveCsvImport(imp), /元CSVが既に存在/);
   assert.equal(mock.publications, 0);
-  assert.equal(files.get('data/raw-games/2026-09-27.csv'), 'existing csv');
+  assert.equal(files.get('data/raw-games/2026-09-27-01.csv'), 'existing csv');
   assert.ok(!mock.calls.some((x) => x.method === 'POST'));
 });
 
@@ -324,4 +327,128 @@ test('管理画面: ID選択→プレビューにセル訂正の差分→差し�
   assert.equal(files.get('data/raw-games/original.csv'), imp.csvText);
   await element('csvParseBtn').listeners.click();
   assert.match(element('csvPreviewArea').innerHTML, /変更なし/);
+});
+
+function newImportFor(env, csvText, scheduleId = null) {
+  const { context: c, files } = env;
+  const imp = { ...c.buildGameImportFromCsv(csvText), csvText, mode: 'new',
+    resultsData: clone(files.get('data/results.json')), statsData: clone(files.get('data/stats.json')),
+    resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha', scheduleSha: 'data/schedule.json:sha',
+    identitySelected: true, scheduleId, confirmSeparate: true };
+  Object.assign(imp.game, c.newCsvIdentity(imp.resultsData, files.get('data/schedule.json'), imp.game.date, scheduleId));
+  return imp;
+}
+
+for (const sameOpponent of [false, true]) {
+  test(`同日${sameOpponent ? '同一' : '別'}相手の第2・第3試合を登録、元の試合・CSVを保持し追加分だけ加算、個別差し替え可能`, async () => {
+    const env = setup();
+    const { context: c, files, imp: first } = env;
+    await c.saveCsvImport(first);
+    const firstGame = clone(c.findCsvReplacement(files.get('data/results.json'), first.game.gameId).game);
+    const firstRaw = files.get(first.game.rawCsvPath);
+    const before = clone(files.get('data/stats.json'));
+    const second = newImportFor(env, sameOpponent ? first.csvText : first.csvText.replace('Pana Spirits', '別チーム'));
+    const expected = clone(before);
+    c.applyBattingStatsToPlayers(expected.seasonRanking.players, second.playerStats);
+    c.recomputeSeasonCategories(expected.seasonRanking);
+    await c.saveCsvImport(second);
+    assert.notEqual(first.game.gameId, second.game.gameId);
+    assert.notEqual(first.game.rawCsvPath, second.game.rawCsvPath);
+    assert.deepEqual(files.get('data/stats.json'), clone(expected));
+    assert.deepEqual(clone(c.findCsvReplacement(files.get('data/results.json'), first.game.gameId).game), firstGame);
+    assert.equal(files.get(first.game.rawCsvPath), firstRaw);
+    const third = newImportFor(env, first.csvText);
+    await c.saveCsvImport(third);
+    assert.equal(new Set([first, second, third].map(i => i.game.rawCsvPath)).size, 3);
+    for (const imp of [first, second, third]) {
+      const oldResults = clone(files.get('data/results.json'));
+      const csvText = imp.csvText.replace('一ゴロ', '"左２安\n打点１"');
+      const replacement = { ...c.buildGameImportFromCsv(csvText), csvText, mode: 'replace', targetGameId: imp.game.gameId,
+        resultsSha: 'data/results.json:sha', statsSha: 'data/stats.json:sha', rawSha: imp.game.rawCsvPath + ':sha' };
+      await c.saveCsvImport(replacement);
+      assert.equal(files.get(imp.game.rawCsvPath), csvText);
+      const others = data => data.groups.flatMap(g => g.games).filter(g => g.gameId !== imp.game.gameId);
+      assert.deepEqual(others(files.get('data/results.json')), others(oldResults));
+    }
+  });
+}
+
+test('明示選択した日程IDを継承、日付や相手名からは自動同定しない', async () => {
+  const env = setup();
+  const { context: c, files } = env;
+  files.set('data/schedule.json', { games: [
+    { id: 'schedule-first', date: env.imp.game.date, opponent: env.imp.game.opponent },
+    { id: 'schedule-second', date: env.imp.game.date, opponent: env.imp.game.opponent },
+  ] });
+  installGitHub(c, files);
+  for (const id of ['schedule-first', 'schedule-second']) {
+    const imp = newImportFor(env, env.imp.csvText, id);
+    await c.saveCsvImport(imp);
+    assert.equal(imp.game.gameId, id);
+    assert.equal(files.get(`data/raw-games/${id}.csv`), imp.csvText);
+  }
+  assert.throws(() => newImportFor(env, env.imp.csvText, 'schedule-first'), /登録済み/);
+  const separate = newImportFor(env, env.imp.csvText);
+  assert.match(separate.game.gameId, /^2026-09-27-\d+$/);
+});
+
+test('自動IDは結果のID・日程のID・既存CSV参照先を避ける', () => {
+  const { context: c, imp } = setup();
+  const results = { groups: [{ games: [
+    { gameId: '2026-09-27-01' },
+    { gameId: 'other', rawCsvPath: 'data/raw-games/2026-09-27-03.csv' },
+  ] }] };
+  const identity = c.newCsvIdentity(results, { games: [{ id: '2026-09-27-02' }] }, imp.game.date, null);
+  assert.equal(identity.gameId, '2026-09-27-04');
+});
+
+test('同日既存試合は別試合の確認が必要、日程未選択も保存しない', async () => {
+  const env = setup();
+  await env.context.saveCsvImport(env.imp);
+  const second = newImportFor(env, env.imp.csvText);
+  second.confirmSeparate = false;
+  await assert.rejects(env.context.saveCsvImport(second), /別試合/);
+  second.confirmSeparate = true;
+  second.identitySelected = false;
+  await assert.rejects(env.context.saveCsvImport(second), /対応する日程/);
+  assert.equal(env.mock.publications, 1);
+});
+
+test('日程SHA競合で停止し3ファイルを書き換えない', async () => {
+  const { context: c, imp, mock } = setup();
+  imp.scheduleSha = 'outdated';
+  await assert.rejects(c.saveCsvImport(imp), /他の更新/);
+  assert.ok(!mock.calls.some(call => call.method === 'POST'));
+});
+
+test('新規登録プレビュー: 同日一覧・CSV一致警告・明示選択・別試合確認後に保存', async () => {
+  const env = setup();
+  const { context: c, imp, element, files } = env;
+  await c.saveCsvImport(imp);
+  element('csvImportMode').value = 'new';
+  element('csvFileInput').files = [{ text: async () => imp.csvText }];
+  await element('csvParseBtn').listeners.click();
+  const html = element('csvPreviewArea').innerHTML;
+  assert.match(html, /同じ日付の登録済み試合/);
+  assert.match(html, /2026-09-27-01/);
+  assert.match(html, /登録済み元CSVと内容が一致/);
+  assert.match(html, /別試合として新規登録する/);
+  assert.match(html, /対応する日程なし/);
+  element('csvScheduleChoice').listeners.change({ target: { value: '__new__' } });
+  assert.match(element('csvNewIdentity').textContent, /2026-09-27-02/);
+  element('csvConfirmSeparate').checked = true;
+  vm.runInContext('loadResults = async () => {};', c);
+  await element('csvCommitBtn').listeners.click();
+  assert.ok(files.has('data/raw-games/2026-09-27-02.csv'));
+});
+
+test('既存試合の識別情報と日付だけのCSV参照先は新規IDの発行で変わらない', () => {
+  const { context: c } = setup();
+  const results = read('results.json');
+  const games = results.groups.filter(g => g.era === 'current').flatMap(g => g.games);
+  for (const game of games) Object.assign(game, { gameId: `${game.date}-01`, rawCsvPath: `data/raw-games/${game.date}.csv` });
+  const before = clone(results);
+  const identity = c.newCsvIdentity(results, { games: [] }, '2026-09-13', null);
+  assert.equal(identity.gameId, '2026-09-13-02');
+  assert.deepEqual(results, before);
 });

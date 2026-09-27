@@ -34,6 +34,7 @@ function setup() {
   const run = (code) => vm.runInContext(code, context);
   const functions = run('({ prepareResultBoxscores, totalResultBatting, applyResultBattingDelta, buildGameImportFromCsv, applyBattingStatsToPlayers, recomputeSeasonCategories, reconstructAtBatsFromRow, collectBoxscoreFromRow, collectCurrentGroupGames, mergeGameIntoResults, saveResults, loadResults })');
   const files = new Map(['results.json', 'stats.json'].map((name) => [`data/${name}`, readJson(name)]));
+  files.set('data/schedule.json', { games: [] });
   const writes = [];
   context.ghGet = async (name) => {
     if (files.has(name)) return { sha: name + ':sha', content: Buffer.from(JSON.stringify(files.get(name))).toString('base64') };
@@ -166,8 +167,10 @@ test('CSV取り込みの既存計算と、新規試合を通常保存する計�
   const env = await existing();
   const imp = env.functions.buildGameImportFromCsv(readCsv('2026-09-13'));
   imp.game.date = '2026-09-27';
+  imp.game.gameId = '2026-09-27-01';
+  imp.game.rawCsvPath = 'data/raw-games/2026-09-27-01.csv';
   env.functions.mergeGameIntoResults(env.results, imp.game, 'league');
-  assert.throws(() => env.functions.mergeGameIntoResults(env.results, imp.game, 'league'), /同じ日付/);
+  assert.throws(() => env.functions.mergeGameIntoResults(env.results, imp.game, 'league'), /同じgameId/);
   const expected = clone(env.stats);
   env.functions.applyBattingStatsToPlayers(expected.seasonRanking.players, imp.playerStats);
   env.functions.recomputeSeasonCategories(expected.seasonRanking);
@@ -283,6 +286,8 @@ test('CSVの実際の保存処理から通常保存・再編集へ移っても�
   const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
   const imp = env.functions.buildGameImportFromCsv(csvText);
   Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
+  Object.assign(imp, { identitySelected: true, scheduleId: null, scheduleSha: 'data/schedule.json:sha' });
+  Object.assign(imp.game, env.context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
   env.context.importForTest = imp;
   env.run('pendingCsvImport = importForTest;');
   await env.run('commitCsvImport()');
@@ -332,6 +337,8 @@ for (const importFirst of [false, true]) {
       const csvText = readCsv('2026-09-13').replace('9/13,', '9/27,');
       const imp = env.functions.buildGameImportFromCsv(csvText);
       Object.assign(imp, { csvText, resultsData: readJson('results.json'), resultsSha: 'data/results.json:sha', statsData: readJson('stats.json'), statsSha: 'data/stats.json:sha' });
+      Object.assign(imp, { identitySelected: true, scheduleId: null, scheduleSha: 'data/schedule.json:sha' });
+      Object.assign(imp.game, env.context.newCsvIdentity(imp.resultsData, { games: [] }, imp.game.date, null));
       env.context.importForTest = imp;
       env.run('pendingCsvImport = importForTest;');
       await env.run('commitCsvImport()');

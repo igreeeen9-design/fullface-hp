@@ -44,7 +44,7 @@ module.exports = function installCsvGitHub(context, files, writes = []) {
       return ok({ sha });
     }
     if (route === 'git/commits') {
-      assert.deepEqual(body.parents, ['base']);
+      assert.deepEqual(body.parents, [mock.head]);
       const sha = `commit-${++index}`; commits.set(sha, body);
       return ok({ sha });
     }
