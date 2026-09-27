@@ -37,7 +37,7 @@ function setup(attendance = fixtureAttendance) {
   run("states.nextGame = { data: initialData, sha: 'next-sha' }; states.schedule = { data: initialSchedule, sha: 'original-sha' }; renderLineup = () => {}; renderBench = () => {}; renderSchedule = () => {};");
   node('attendanceGameSelect').value = '0';
   const writes = [];
-  ctx.ghGet = async file => ({ sha: 'read-sha', content: Buffer.from(JSON.stringify(file.endsWith('next-game.json') ? original : file.endsWith('players.json') ? read('players.json') : schedule)).toString('base64') });
+  ctx.ghGet = async file => ({ sha: 'read-sha', content: Buffer.from(JSON.stringify(file.endsWith('next-game.json') ? original : file.endsWith('players.json') ? read('players.json') : file.endsWith('results.json') ? read('results.json') : schedule)).toString('base64') });
   ctx.ghPut = async (file, data, sha, message) => { writes.push({ file, data: clone(data), sha, message }); return { content: { sha: 'new-sha' } }; };
   return { ctx, run, node, original, schedule, writes, state: () => run('states.schedule'), select: name => {
     ctx.selectedName = name; run('attendanceOptions.find(p => p.name === selectedName).selected = true;');
@@ -253,4 +253,112 @@ test('attendanceやIDのない旧データでも通常公開・下書き・試�
   env.ctx.todayJstDateString=()=> '2026-09-27'; await env.run('archiveAndClear()');
   assert.equal(env.writes.length,3);
   for (const write of env.writes) assert.ok(!('attendance' in write.data.current));
+});
+
+function switchingSetup(count = 2, sameOpponent = false) {
+  const env = setup();
+  env.schedule.games = Array.from({ length: count }, (_, index) => ({
+    id: `double-${index + 1}`, date: '2026-09-27', time: `${9 + index * 2}:00`,
+    opponent: sameOpponent ? '同一相手' : `相手${index + 1}`, location: '球場',
+    attendance: { members: [{ name: `参加者${index + 1}`, number: String(index + 1) }], updatedAt: 'test' },
+  }));
+  env.schedule.games.push({ id: 'tomorrow', date: '2026-09-28', time: '9:00', opponent: '翌日の相手' });
+  env.ctx.switchCurrent = { scheduleGameId: 'double-1', date: '2026-09-27', opponent: env.schedule.games[0].opponent, lineup: [], bench: [] };
+  env.ctx.switchSchedule = env.schedule;
+  env.run('states.nextGame.data = { current: switchCurrent, history: [], drafts: [] }; states.schedule.data = switchSchedule;');
+  env.ctx.todayJstDateString = () => '2026-09-27';
+  env.results = { groups: [] };
+  env.ctx.ghGet = async file => ({ sha: 'read-sha', content: Buffer.from(JSON.stringify(file.endsWith('results.json') ? env.results : env.schedule)).toString('base64') });
+  return env;
+}
+
+for (const count of [2, 3]) test(`同日${count}試合はIDごとに順次切替、全終了後は翌日、参加者は次の試合だけ表示`, async () => {
+  const env = switchingSetup(count);
+  const originalSchedule = clone(env.schedule);
+  for (let number = 1; number <= count; number++) {
+    await env.run('archiveAndClear()');
+    assert.equal(env.writes.length, number);
+    const data = env.writes.at(-1).data;
+    assert.equal(data.current.scheduleGameId, number < count ? `double-${number + 1}` : 'tomorrow');
+    assert.equal(data.history.at(-1).scheduleGameId, `double-${number}`);
+    assert.ok(!('attendance' in data.history.at(-1)));
+    assert.ok(!('attendance' in data.current));
+    const html = publicRender(data.current, env.schedule);
+    assert.ok(!html.includes(`参加者${number}`));
+    if (number < count) assert.ok(html.includes(`参加者${number + 1}`));
+    assert.ok(env.writes.every(write => write.file === 'data/next-game.json'));
+  }
+  assert.deepEqual(env.schedule, originalSchedule);
+  assert.deepEqual(env.results, { groups: [] });
+});
+
+test('同日同一相手でもIDで区別し、配列順によらず開始時刻順に次戦を選ぶ', async () => {
+  const env = switchingSetup(3, true);
+  env.schedule.games.reverse();
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[0].data.current.scheduleGameId, 'double-2');
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[1].data.current.scheduleGameId, 'double-3');
+});
+
+test('結果登録済みと過去の終了履歴のIDは次戦候補から除外', async () => {
+  const env = switchingSetup(3);
+  env.results.groups = [{ games: [{ gameId: 'double-2', date: '別日付でもID優先' }] }];
+  env.run("states.nextGame.data.history = [{ scheduleGameId: 'double-3' }];");
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[0].data.current.scheduleGameId, 'tomorrow');
+});
+
+test('日付や相手名が一致する別IDの結果だけでは終了判定しない', async () => {
+  const env = switchingSetup(2, true);
+  env.results.groups = [{ games: [{ gameId: 'unrelated', date: '2026-09-27', opponent: '同一相手' }] }];
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[0].data.current.scheduleGameId, 'double-2');
+});
+
+test('1日1試合は翌日へ進み、全試合終了後は空欄にする', async () => {
+  const env = switchingSetup(1);
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[0].data.current.scheduleGameId, 'tomorrow');
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes[1].data.current.opponent, '');
+  assert.ok(!env.writes[1].data.current.scheduleGameId);
+});
+
+for (const time of [null, '未定', '25:00', '13:00']) test(`同日順序が不明(${time})なら履歴保存も行わず停止`, async () => {
+  const env = switchingSetup(3);
+  env.schedule.games[1].time = time;
+  const before = clone(env.run('states.nextGame.data'));
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes.length, 0);
+  assert.match(env.node('statusMsg').textContent, /開始時刻/);
+  assert.deepEqual(clone(env.run('states.nextGame.data')), before);
+});
+
+test('過去日付だけでは終了扱いしない・日付未定は候補外', () => {
+  const env = switchingSetup();
+  const next = env.ctx.findNextScheduledGame({ games: [
+    { id: 'undated', date: null }, { id: 'past', date: '2026-09-26' }, { id: 'today', date: '2026-09-27' },
+  ] });
+  assert.equal(next.id, 'past');
+});
+
+test('次戦IDなしで同日同一相手が複数なら推測せず停止', async () => {
+  const env = switchingSetup(2, true);
+  env.run('delete states.nextGame.data.current.scheduleGameId;');
+  await env.run('archiveAndClear()');
+  assert.equal(env.writes.length, 0);
+  assert.match(env.node('statusMsg').textContent, /一意に特定できません/);
+});
+
+test('結果取得失敗・次戦SHA競合では切替前の状態を維持', async () => {
+  for (const failRead of [true, false]) {
+    const env = switchingSetup();
+    const before = clone(env.run('states.nextGame.data'));
+    if (failRead) env.ctx.ghGet = async () => { throw new Error('read failure'); };
+    else env.ctx.ghPut = async (file, data, sha) => { assert.equal(sha, 'next-sha'); throw new Error('409'); };
+    await env.run('archiveAndClear()');
+    assert.equal(env.writes.length, 0);
+    assert.deepEqual(clone(env.run('states.nextGame.data')), before);
+  }
 });

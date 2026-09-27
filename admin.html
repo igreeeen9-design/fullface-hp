@@ -671,6 +671,7 @@
       <div id="draftListArea" style="margin-top:1rem;"></div>
     </section>
 
+    <p class="admin-note">試合終了後は、未終了の試合を日付・開始時刻順にセットします。同日に複数試合ある場合は、日程にそれぞれ異なる開始時刻を設定してください。</p>
     <div class="admin-actions">
       <button type="button" class="admin-btn admin-btn-primary" id="saveBtn">公開する</button>
       <button type="button" class="admin-btn admin-btn-outline" id="archiveBtn">この試合を終了(履歴に保存し、次の試合を自動セット)</button>
@@ -1433,16 +1434,38 @@ function normalizeTimeForInput(t) {
   return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
 }
 
-// schedule.jsonの中から、日付が確定していて今日(JST)より後の試合のうち、
-// もっとも近いものを返す。日付未定の試合(date: null)や終了済みの試合は対象外。
-// schedule.json側の終了済みエントリは自動削除しないので、日付フィルタで除く。
-function findNextScheduledGame(scheduleData) {
-  const today = todayJstDateString();
+// 日付では終了と判断しない。結果・終了履歴のIDだけで除外する。
+function findNextScheduledGame(scheduleData, completedIds = []) {
   const games = (scheduleData && Array.isArray(scheduleData.games)) ? scheduleData.games : [];
-  const upcoming = games
-    .filter((g) => g.date && g.date > today)
+  const completed = new Set(completedIds);
+  const ids = new Set();
+  for (const game of games) {
+    if (!game.id || ids.has(game.id)) throw new Error('試合日程のIDが未設定または重複しています。日程を確認してください。');
+    ids.add(game.id);
+  }
+  const upcoming = games.filter(g => g.date && !completed.has(g.id))
     .sort((a, b) => a.date.localeCompare(b.date));
-  return upcoming[0] || null;
+  if (!upcoming.length) return null;
+  const sameDay = upcoming.filter(g => g.date === upcoming[0].date);
+  if (sameDay.length === 1) return sameDay[0];
+  const times = new Map();
+  for (const game of sameDay) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(game.time || '').trim());
+    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
+      throw new Error(`${game.date}の試合順を確定できません。各試合の開始時刻を設定してください。`);
+    }
+    const minutes = Number(match[1]) * 60 + Number(match[2]);
+    if ([...times.values()].includes(minutes)) throw new Error(`${game.date}の開始時刻が重複しています。試合順を確認し、異なる開始時刻を設定してください。`);
+    times.set(game.id, minutes);
+  }
+  return sameDay.sort((a, b) => times.get(a.id) - times.get(b.id))[0];
+}
+
+function completedScheduleIds(results, history) {
+  return [
+    ...(results.groups || []).flatMap(group => group.games || []).map(game => game.gameId),
+    ...history.map(game => game.scheduleGameId),
+  ].filter(Boolean);
 }
 
 async function archiveAndClear() {
@@ -1455,11 +1478,19 @@ async function archiveAndClear() {
     current.updatedAt = new Date().toISOString();
     const data = states.nextGame.data;
     const history = data.history || [];
-    const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
-
-    const scheduleJson = await ghGet(FILES.schedule);
+    const [scheduleJson, resultsJson] = await Promise.all([ghGet(FILES.schedule), ghGet(FILES.results)]);
     const scheduleData = JSON.parse(base64ToUtf8(scheduleJson.content));
-    const nextGame = findNextScheduledGame(scheduleData);
+    const resultsData = JSON.parse(base64ToUtf8(resultsJson.content));
+    // フォームにはIDを持たせない。保存済みの紐付けを優先し、旧形式は一意の対応だけ補完する。
+    const savedCurrent = data.current || {};
+    const currentGame = findAttendanceGame(scheduleData.games || [], savedCurrent);
+    if (savedCurrent.scheduleGameId) current.scheduleGameId = savedCurrent.scheduleGameId;
+    else if (currentGame && currentGame.id) current.scheduleGameId = currentGame.id;
+    else if ((scheduleData.games || []).some(game => game.date === savedCurrent.date)) {
+      throw new Error('終了する試合の日程IDを一意に特定できません。次戦と日程の紐付けを確認してください。');
+    }
+    const newHistory = [...history, { ...current, archivedAt: new Date().toISOString() }];
+    const nextGame = findNextScheduledGame(scheduleData, completedScheduleIds(resultsData, newHistory));
 
     const blankCurrent = nextGame
       ? { opponent: nextGame.opponent || '', date: nextGame.date || '', startTime: normalizeTimeForInput(nextGame.time), meetTime: '', location: nextGame.location || '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() }
