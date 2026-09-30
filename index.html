@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260926d">
+<link rel="stylesheet" href="style.css?v=20260930">
 </head>
 <body>
 
@@ -222,13 +222,18 @@
 </main>
 
 <footer class="site-footer">
-  <img src="images/helmet-logo.png" alt="FULL FACE ヘルメットロゴ" class="footer-logo" width="80" height="80" loading="lazy">
+  <div class="footer-logo-area">
+    <button type="button" class="footer-logo-button" id="footerLogoButton" aria-label="FULL FACEのロゴ：メッセージを表示">
+      <img src="images/helmet-logo.png" alt="FULL FACE ヘルメットロゴ" class="footer-logo" width="80" height="80" loading="lazy">
+    </button>
+    <span class="footer-logo-message" id="footerLogoMessage" role="status" aria-live="polite"></span>
+  </div>
   <p>&copy; 2026 FULL FACE Baseball Club</p>
 </footer>
 
 <script src="game-attendance.js?v=20260923"></script>
 <script src="weather.js?v=20260925c"></script>
-<script src="script.js?v=20260925"></script>
+<script src="script.js?v=20260930"></script>
 <!-- アクセス数計測(GoatCounter)。管理画面「アクセス状況」で集計を確認。公開ページには何も表示しない -->
 <script data-goatcounter="https://fullface.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body>

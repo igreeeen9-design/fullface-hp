@@ -816,3 +816,19 @@ async function loadSiteData() {
 }
 
 loadSiteData();
+
+// フッターロゴ専用。1つの表示を再利用し、連打時は同じ演出を最初から再生する。
+const footerLogoButton = document.getElementById('footerLogoButton');
+const footerLogoMessage = document.getElementById('footerLogoMessage');
+if (footerLogoButton && footerLogoMessage) {
+  footerLogoButton.addEventListener('click', () => {
+    footerLogoMessage.classList.remove('is-visible');
+    footerLogoMessage.textContent = '来年もやるばい';
+    void footerLogoMessage.offsetWidth;
+    footerLogoMessage.classList.add('is-visible');
+  });
+  footerLogoMessage.addEventListener('animationend', () => {
+    footerLogoMessage.classList.remove('is-visible');
+    footerLogoMessage.textContent = '';
+  });
+}
