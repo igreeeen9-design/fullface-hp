@@ -1289,7 +1289,8 @@ img { max-width: 100%; display: block; }
 .footer-logo-button { display: block; width: 80px; height: 80px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; touch-action: manipulation; }
 .footer-logo-button .footer-logo { margin: 0; }
 .footer-logo-button:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
-.footer-logo-message { position: absolute; z-index: 2; bottom: calc(100% + 10px); left: 50%; width: max-content; max-width: calc(100vw - 32px); padding: 0.45rem 0.8rem; border-radius: 10px; background: #fff; color: var(--navy); font-size: clamp(22px, 5vw, 28px); font-weight: 900; line-height: 1.4; white-space: nowrap; box-shadow: 0 4px 16px #0003; pointer-events: none; opacity: 0; transform: translateX(-50%); }
+.footer-logo-message { position: absolute; z-index: 2; bottom: calc(100% + 18px); left: 50%; width: max-content; max-width: calc(100vw - 32px); padding: 0.5rem 1rem; border: 3px solid var(--navy); border-radius: 50% / 45%; background: #fff; color: var(--navy); font-size: clamp(22px, 5vw, 28px); font-weight: 900; line-height: 1.4; white-space: nowrap; box-shadow: 0 4px 16px #0003; pointer-events: none; opacity: 0; transform: translateX(-50%); }
+.footer-logo-message::after { content: ""; position: absolute; bottom: -12px; left: calc(50% - 9px); width: 18px; height: 18px; background: #fff; border-right: 3px solid var(--navy); border-bottom: 3px solid var(--navy); transform: skewY(15deg) rotate(45deg); }
 .footer-logo-message.is-visible { animation: footer-message-pop 2.1s both; }
 @keyframes footer-message-pop {
   0% { opacity: 0; transform: translateX(-50%) scale(1.3); }
