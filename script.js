@@ -492,19 +492,7 @@ function renderResults(container, resultsData) {
     container.innerHTML = '<p class="placeholder-note">試合結果は準備中です。</p>';
     return;
   }
-  const parts = groups.map((g) => {
-    let html = renderResultsGroup(g);
-    // 2026年度は試合ごとの個人成績(admin.htmlから入力)が蓄積され次第、
-    // 自動でシーズン合計成績を表示する(現時点でデータが無ければ何も表示しない)
-    const { rows: seasonRows, hasReliablePA } = aggregateBoxscoreSeason(g);
-    if (seasonRows.length) {
-      html += `
-      <h3 class="table-title">${escapeHtml(g.title)} シーズン合計成績</h3>
-      <p class="placeholder-note">※ admin.htmlから入力された試合ごとの個人成績の合計です。打数(AB)が0の選手は打率などを「-」と表示しています。GPは実参加者を確定した試合では、打席の有無にかかわらず球場でチーム活動に参加した人を1試合として集計します。未確定の過去試合は従来の出場記録に基づきます。</p>
-      ${renderSeasonTotalsTable(seasonRows, hasReliablePA)}`;
-    }
-    return html;
-  });
+  const parts = groups.map(renderResultsGroup);
   const totalHtml = resultsData.leagueTotal
     ? `<p class="league-total">${escapeHtml(resultsData.leagueTotal)}</p>` : '';
   container.innerHTML = parts.join('') + totalHtml;
