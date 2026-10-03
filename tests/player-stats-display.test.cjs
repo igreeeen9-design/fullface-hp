@@ -20,3 +20,21 @@ test('個人成績は安打・打率・出塁率・二塁打の順で見出し�
     assert.equal(JSON.stringify(player), before);
   }
 });
+
+test('表示時のみPA・AB・Hの降順に並べ替え、全項目同数なら登録順を保つ', () => {
+  const players = [
+    { name: 'PA少', pa: 9, ab: 9, h: 9 },
+    { name: 'H少', pa: 10, ab: 8, h: 1 },
+    { name: '同数先', pa: '10', ab: '8', h: '3' },
+    { name: 'AB少', pa: 10, ab: 7, h: 7 },
+    { name: 'PA最多', pa: 11, ab: 1, h: 0 },
+    { name: '同数後', pa: 10, ab: 8, h: 3 },
+  ];
+  const before = JSON.stringify(players);
+  players.forEach(Object.freeze);
+  Object.freeze(players);
+  const html = context.renderPlayerStatsTable(players);
+  const names = [...html.matchAll(/<tr>\s*<td>(.*?)<\/td>/g)].map(m => m[1]);
+  assert.deepEqual(names, ['PA最多', '同数先', '同数後', 'H少', 'AB少', 'PA少']);
+  assert.equal(JSON.stringify(players), before);
+});

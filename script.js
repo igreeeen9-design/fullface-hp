@@ -633,7 +633,10 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
    あらかじめ計算済みの値として保持されており、ここでは計算をせずそのまま表示するだけ
    (試合ごとのボックススコア入力が揃うまでの間、既に検証済みの数値を表示するための仕組み)。 */
 function renderPlayerStatsTable(players) {
-  const rows = (players || []).map((p) => `
+  // 元データの登録順は保ち、表示用のコピーだけを並べ替える。全項目同数なら登録順を維持。
+  const sortedPlayers = [...(players || [])].sort((a, b) =>
+    (Number(b.pa) - Number(a.pa)) || (Number(b.ab) - Number(a.ab)) || (Number(b.h) - Number(a.h)));
+  const rows = sortedPlayers.map((p) => `
             <tr>
               <td>${escapeHtml(p.name)}</td>
               <td>${escapeHtml(p.gp)}</td>
