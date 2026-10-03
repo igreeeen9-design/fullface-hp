@@ -32,14 +32,14 @@
         "name": "田中（桜）",
         "number": "61",
         "position": "右",
-        "comment": "抑え？"
+        "comment": "抑え"
       },
       {
         "order": 5,
         "name": "桑原",
         "number": "19",
         "position": "DH",
-        "comment": "中継ぎ？"
+        "comment": "中継ぎ"
       },
       {
         "order": 6,
@@ -85,8 +85,8 @@
       }
     ],
     "bench": [],
-    "note": "いや～、古賀くんそろそろ４番かなぁ",
-    "updatedAt": "2026-10-02T04:10:53.779Z",
+    "note": "",
+    "updatedAt": "2026-10-03T05:00:38.263Z",
     "scheduleGameId": "schedule-2"
   },
   "drafts": [
