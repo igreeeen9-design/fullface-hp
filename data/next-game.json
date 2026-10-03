@@ -38,8 +38,8 @@
         "order": 5,
         "name": "桑原",
         "number": "19",
-        "position": "DH",
-        "comment": "中継ぎ"
+        "position": "投",
+        "comment": "先発！"
       },
       {
         "order": 6,
@@ -53,7 +53,7 @@
         "name": "古賀",
         "number": "16",
         "position": "遊",
-        "comment": ""
+        "comment": "中継ぎ"
       },
       {
         "order": 8,
@@ -71,22 +71,20 @@
       },
       {
         "order": 10,
-        "name": "田中（敬）",
-        "number": "8",
-        "position": "投",
-        "comment": ""
-      },
-      {
-        "order": 11,
         "name": "井口",
         "number": "1",
         "position": "捕",
         "comment": ""
       }
     ],
-    "bench": [],
-    "note": "",
-    "updatedAt": "2026-10-03T05:00:38.263Z",
+    "bench": [
+      {
+        "name": "田中（敬）",
+        "number": "8"
+      }
+    ],
+    "note": "メンバーの体調を考慮して予定を変更してます。\nスタメンは当日変更の可能性もあるので、そのつもりで心の準備お願いします。",
+    "updatedAt": "2026-10-03T06:41:27.144Z",
     "scheduleGameId": "schedule-2"
   },
   "drafts": [
