@@ -1084,6 +1084,14 @@ img { max-width: 100%; display: block; }
   line-height: 1.4;
 }
 
+/* PCでは次戦カードと横幅を揃え、スマホのコンパクトな表示は維持する。 */
+@media (min-width: 761px) {
+  .next-game-weather {
+    max-width: none;
+    padding: 0.85rem 1.5rem;
+  }
+}
+
 /* 次戦情報(.next-game-content)は項目間の余白が大きいので、天気欄は直前の
    基本情報に寄せて付随情報に見せる */
 .next-game-content > .next-game-weather {
