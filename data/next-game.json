@@ -1,91 +1,15 @@
 {
   "current": {
-    "opponent": "3ColorRuns",
-    "date": "2026-10-04",
-    "startTime": "13:00",
-    "meetTime": "12:20",
-    "location": "北谷運動公園",
-    "lineup": [
-      {
-        "order": 1,
-        "name": "真鍋",
-        "number": "7",
-        "position": "三",
-        "comment": ""
-      },
-      {
-        "order": 2,
-        "name": "高橋",
-        "number": "17",
-        "position": "二",
-        "comment": ""
-      },
-      {
-        "order": 3,
-        "name": "大淵",
-        "number": "25",
-        "position": "中",
-        "comment": ""
-      },
-      {
-        "order": 4,
-        "name": "田中（桜）",
-        "number": "61",
-        "position": "右",
-        "comment": "抑え"
-      },
-      {
-        "order": 5,
-        "name": "桑原",
-        "number": "19",
-        "position": "投",
-        "comment": "先発！"
-      },
-      {
-        "order": 6,
-        "name": "道下",
-        "number": "13",
-        "position": "DH",
-        "comment": ""
-      },
-      {
-        "order": 7,
-        "name": "古賀",
-        "number": "16",
-        "position": "遊",
-        "comment": "中継ぎ"
-      },
-      {
-        "order": 8,
-        "name": "中西",
-        "number": "4",
-        "position": "左",
-        "comment": ""
-      },
-      {
-        "order": 9,
-        "name": "森",
-        "number": "6",
-        "position": "一",
-        "comment": ""
-      },
-      {
-        "order": 10,
-        "name": "井口",
-        "number": "1",
-        "position": "捕",
-        "comment": ""
-      }
-    ],
-    "bench": [
-      {
-        "name": "田中（敬）",
-        "number": "8"
-      }
-    ],
-    "note": "メンバーの体調を考慮して予定を変更してます。\nスタメンは当日変更の可能性もあるので、そのつもりで心の準備お願いします。",
-    "updatedAt": "2026-10-03T06:41:27.144Z",
-    "scheduleGameId": "schedule-2"
+    "opponent": "Blue Bandits",
+    "date": "2026-10-18",
+    "startTime": "15:00",
+    "meetTime": "",
+    "location": "大佐野スポーツ公園",
+    "lineup": [],
+    "bench": [],
+    "note": "",
+    "updatedAt": "2026-10-04T07:53:58.367Z",
+    "scheduleGameId": "schedule-3"
   },
   "drafts": [
     {
@@ -793,6 +717,453 @@
       "note": "天気が非常に怪しいですが、中止の連絡が入るまで現地集合が基本です。遠方の方には申し訳ないですが、集合お願いします！\n中止の連絡が入り次第、LINEで知らせます。",
       "updatedAt": "2026-09-27T02:36:01.657Z",
       "archivedAt": "2026-09-27T02:36:01.658Z"
+    },
+    {
+      "opponent": "3ColorRuns",
+      "date": "2026-10-04",
+      "startTime": "13:00",
+      "meetTime": "12:20",
+      "location": "北谷運動公園",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "真鍋",
+          "number": "7",
+          "position": "三",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "高橋",
+          "number": "17",
+          "position": "二",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "大淵",
+          "number": "25",
+          "position": "中",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "田中（桜）",
+          "number": "61",
+          "position": "右",
+          "comment": "抑え"
+        },
+        {
+          "order": 5,
+          "name": "桑原",
+          "number": "19",
+          "position": "投",
+          "comment": "先発！"
+        },
+        {
+          "order": 6,
+          "name": "道下",
+          "number": "13",
+          "position": "DH",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "古賀",
+          "number": "16",
+          "position": "遊",
+          "comment": "中継ぎ"
+        },
+        {
+          "order": 8,
+          "name": "中西",
+          "number": "4",
+          "position": "左",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "森",
+          "number": "6",
+          "position": "一",
+          "comment": ""
+        },
+        {
+          "order": 10,
+          "name": "井口",
+          "number": "1",
+          "position": "捕",
+          "comment": ""
+        }
+      ],
+      "bench": [
+        {
+          "name": "田中（敬）",
+          "number": "8"
+        }
+      ],
+      "note": "メンバーの体調を考慮して予定を変更してます。\nスタメンは当日変更の可能性もあるので、そのつもりで心の準備お願いします。",
+      "updatedAt": "2026-10-04T07:53:57.660Z",
+      "scheduleGameId": "schedule-2",
+      "archivedAt": "2026-10-04T07:53:58.367Z"
     }
-  ]
+  ],
+  "lastTransitionUndo": {
+    "id": "1791100439893-krijmx5yffe",
+    "beforeCurrent": {
+      "opponent": "3ColorRuns",
+      "date": "2026-10-04",
+      "startTime": "13:00",
+      "meetTime": "12:20",
+      "location": "北谷運動公園",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "真鍋",
+          "number": "7",
+          "position": "三",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "高橋",
+          "number": "17",
+          "position": "二",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "大淵",
+          "number": "25",
+          "position": "中",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "田中（桜）",
+          "number": "61",
+          "position": "右",
+          "comment": "抑え"
+        },
+        {
+          "order": 5,
+          "name": "桑原",
+          "number": "19",
+          "position": "投",
+          "comment": "先発！"
+        },
+        {
+          "order": 6,
+          "name": "道下",
+          "number": "13",
+          "position": "DH",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "古賀",
+          "number": "16",
+          "position": "遊",
+          "comment": "中継ぎ"
+        },
+        {
+          "order": 8,
+          "name": "中西",
+          "number": "4",
+          "position": "左",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "森",
+          "number": "6",
+          "position": "一",
+          "comment": ""
+        },
+        {
+          "order": 10,
+          "name": "井口",
+          "number": "1",
+          "position": "捕",
+          "comment": ""
+        }
+      ],
+      "bench": [
+        {
+          "name": "田中（敬）",
+          "number": "8"
+        }
+      ],
+      "note": "メンバーの体調を考慮して予定を変更してます。\nスタメンは当日変更の可能性もあるので、そのつもりで心の準備お願いします。",
+      "updatedAt": "2026-10-03T06:41:27.144Z",
+      "scheduleGameId": "schedule-2"
+    },
+    "afterCurrent": {
+      "opponent": "Blue Bandits",
+      "date": "2026-10-18",
+      "startTime": "15:00",
+      "meetTime": "",
+      "location": "大佐野スポーツ公園",
+      "lineup": [],
+      "bench": [],
+      "note": "",
+      "updatedAt": "2026-10-04T07:53:58.367Z",
+      "scheduleGameId": "schedule-3"
+    },
+    "beforeHistory": [
+      {
+        "opponent": "Pana Spirits",
+        "date": "2026-09-13",
+        "startTime": "09:00",
+        "meetTime": "08:20",
+        "location": "北谷運動公園",
+        "lineup": [
+          {
+            "order": 1,
+            "name": "中西",
+            "number": "4",
+            "position": "左",
+            "comment": ""
+          },
+          {
+            "order": 2,
+            "name": "田中",
+            "number": "8",
+            "position": "DH",
+            "comment": ""
+          },
+          {
+            "order": 3,
+            "name": "桑原",
+            "number": "19",
+            "position": "投",
+            "comment": ""
+          },
+          {
+            "order": 4,
+            "name": "森",
+            "number": "6",
+            "position": "一",
+            "comment": ""
+          },
+          {
+            "order": 5,
+            "name": "真鍋",
+            "number": "7",
+            "position": "三",
+            "comment": ""
+          },
+          {
+            "order": 6,
+            "name": "髙橋",
+            "number": "17",
+            "position": "二",
+            "comment": ""
+          },
+          {
+            "order": 7,
+            "name": "道下",
+            "number": "13",
+            "position": "右",
+            "comment": ""
+          },
+          {
+            "order": 8,
+            "name": "大淵",
+            "number": "25",
+            "position": "捕",
+            "comment": ""
+          },
+          {
+            "order": 9,
+            "name": "藤岡",
+            "number": "77",
+            "position": "中",
+            "comment": ""
+          },
+          {
+            "order": 10,
+            "name": "古賀",
+            "number": "16",
+            "position": "遊",
+            "comment": "リリーフあるよ"
+          }
+        ],
+        "bench": [
+          {
+            "name": "井口😷",
+            "number": ""
+          }
+        ],
+        "note": "試合前に集合写真撮ります。",
+        "updatedAt": "2026-09-13T06:42:37.006Z",
+        "archivedAt": "2026-09-13T06:42:37.007Z"
+      },
+      {
+        "opponent": "六本松BLACK SOX",
+        "date": "2026-09-27",
+        "startTime": "08:00",
+        "meetTime": "07:45",
+        "location": "駕与丁公園グラウンド",
+        "lineup": [
+          {
+            "order": 1,
+            "name": "大淵",
+            "number": "25",
+            "position": "捕",
+            "comment": ""
+          },
+          {
+            "order": 2,
+            "name": "田中桜",
+            "number": "61",
+            "position": "中",
+            "comment": ""
+          },
+          {
+            "order": 3,
+            "name": "田中敬",
+            "number": "8",
+            "position": "二",
+            "comment": ""
+          },
+          {
+            "order": 4,
+            "name": "真鍋",
+            "number": "7",
+            "position": "三",
+            "comment": ""
+          },
+          {
+            "order": 5,
+            "name": "井口",
+            "number": "1",
+            "position": "一",
+            "comment": ""
+          },
+          {
+            "order": 6,
+            "name": "古賀",
+            "number": "16",
+            "position": "遊",
+            "comment": ""
+          },
+          {
+            "order": 7,
+            "name": "道下",
+            "number": "13",
+            "position": "右",
+            "comment": ""
+          },
+          {
+            "order": 8,
+            "name": "桑原",
+            "number": "19",
+            "position": "投",
+            "comment": ""
+          },
+          {
+            "order": 9,
+            "name": "中西",
+            "number": "4",
+            "position": "左",
+            "comment": ""
+          }
+        ],
+        "bench": [],
+        "note": "天気が非常に怪しいですが、中止の連絡が入るまで現地集合が基本です。遠方の方には申し訳ないですが、集合お願いします！\n中止の連絡が入り次第、LINEで知らせます。",
+        "updatedAt": "2026-09-27T02:36:01.657Z",
+        "archivedAt": "2026-09-27T02:36:01.658Z"
+      }
+    ],
+    "entry": {
+      "opponent": "3ColorRuns",
+      "date": "2026-10-04",
+      "startTime": "13:00",
+      "meetTime": "12:20",
+      "location": "北谷運動公園",
+      "lineup": [
+        {
+          "order": 1,
+          "name": "真鍋",
+          "number": "7",
+          "position": "三",
+          "comment": ""
+        },
+        {
+          "order": 2,
+          "name": "高橋",
+          "number": "17",
+          "position": "二",
+          "comment": ""
+        },
+        {
+          "order": 3,
+          "name": "大淵",
+          "number": "25",
+          "position": "中",
+          "comment": ""
+        },
+        {
+          "order": 4,
+          "name": "田中（桜）",
+          "number": "61",
+          "position": "右",
+          "comment": "抑え"
+        },
+        {
+          "order": 5,
+          "name": "桑原",
+          "number": "19",
+          "position": "投",
+          "comment": "先発！"
+        },
+        {
+          "order": 6,
+          "name": "道下",
+          "number": "13",
+          "position": "DH",
+          "comment": ""
+        },
+        {
+          "order": 7,
+          "name": "古賀",
+          "number": "16",
+          "position": "遊",
+          "comment": "中継ぎ"
+        },
+        {
+          "order": 8,
+          "name": "中西",
+          "number": "4",
+          "position": "左",
+          "comment": ""
+        },
+        {
+          "order": 9,
+          "name": "森",
+          "number": "6",
+          "position": "一",
+          "comment": ""
+        },
+        {
+          "order": 10,
+          "name": "井口",
+          "number": "1",
+          "position": "捕",
+          "comment": ""
+        }
+      ],
+      "bench": [
+        {
+          "name": "田中（敬）",
+          "number": "8"
+        }
+      ],
+      "note": "メンバーの体調を考慮して予定を変更してます。\nスタメンは当日変更の可能性もあるので、そのつもりで心の準備お願いします。",
+      "updatedAt": "2026-10-04T07:53:57.660Z",
+      "scheduleGameId": "schedule-2",
+      "archivedAt": "2026-10-04T07:53:58.367Z"
+    }
+  }
 }
