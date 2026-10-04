@@ -3245,7 +3245,7 @@ function renderPostgame(error = '') {
     const skipped = postgame.mode === 'cancelled' && step >= 2 && step <= 4;
     const done = step < postgame.step || step === 5 && postgame.switchMessage;
     return `<details class="postgame-step" ${step === postgame.step ? 'open' : ''}><summary>${skipped ? '－' : done ? '✓' : step} ${titles[index]}${skipped ? '（雨天中止のため不要）' : ''}</summary>${step === postgame.step ? body : `<p>${skipped ? '今回は不要です。' : done ? '完了済みです。' : '前の操作が終わると進めます。'}</p>`}</details>`;
-  }).join('') + `<div class="postgame-action"><button type="button" class="admin-btn admin-btn-primary" id="postgamePrimary">${postgamePrimaryLabel()}</button></div>` +
+  }).join('') + `<div class="postgame-action"><p id="postgameActionError" role="alert" hidden style="color:#b42318;margin:0 0 .6rem"></p><button type="button" class="admin-btn admin-btn-primary" id="postgamePrimary">${postgamePrimaryLabel()}</button></div>` +
     (postgame.step === 5 && postgame.switchMessage ? '<p>お知らせの更新は任意です。</p><button type="button" class="admin-btn-link" id="postgameNotice">必要ならお知らせを更新</button>' : '') +
     '<button type="button" class="admin-btn-link" id="postgameReset">別の試合を選ぶ</button>';
   if (postgame.step === 5 && postgame.switchMessage) document.getElementById('postgameNotice').onclick = () => document.querySelector('[data-tab="nextgame"]').click();
@@ -3379,6 +3379,14 @@ async function postgameAction() {
       rememberPostgame();
     }
   } catch (error) {
+    // 確認エラーでフォームを再生成すると、参加者や確認チェックが失われる。
+    // 操作ボタンの直上に理由を表示し、その場で修正できるようにする。
+    if (postgame.step === 3 && !error.message.includes(CSV_CONFLICT)) {
+      const message = document.getElementById('postgameActionError');
+      message.textContent = error.message;
+      message.hidden = false;
+      return;
+    }
     if (error.message.includes(CSV_CONFLICT)) {
       if (postgame.imp) {
         const csv = postgame.imp.csvText; delete postgame.imp.attempt; delete postgame.attempt;

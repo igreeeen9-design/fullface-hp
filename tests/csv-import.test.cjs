@@ -729,9 +729,15 @@ test('試合後フローは実参加者の確認まで保存へ進まず、名�
   await selectWorkflow(env);
   await env.context.parsePostgameCsv(env.imp.csvText);
   env.element('postgameParticipantsConfirmed').checked=false;
+  env.element('postgameParticipantExtra').value='監督';
+  const previewBefore = env.element('postgameFlow').innerHTML;
   await env.context.postgameAction();
   assert.equal(env.state().step,3);
-  assert.match(env.element('postgameFlow').innerHTML,/実際の参加者を確認/);
+  assert.match(env.element('postgameActionError').textContent,/実際の参加者を確認/);
+  assert.equal(env.element('postgameActionError').hidden, false);
+  assert.equal(env.element('postgameFlow').innerHTML, previewBefore);
+  assert.equal(env.element('postgameParticipantExtra').value, '監督');
+  assert.equal(env.element('postgamePrimary').disabled, false);
   env.element('postgameParticipantsConfirmed').checked=true;
   env.element('postgameParticipantExtra').value='監督\n監督';
   await env.context.postgameAction();
