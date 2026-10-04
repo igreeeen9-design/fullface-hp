@@ -3246,9 +3246,11 @@ function renderPostgame(error = '') {
     const done = step < postgame.step || step === 5 && postgame.switchMessage;
     return `<details class="postgame-step" ${step === postgame.step ? 'open' : ''}><summary>${skipped ? '－' : done ? '✓' : step} ${titles[index]}${skipped ? '（雨天中止のため不要）' : ''}</summary>${step === postgame.step ? body : `<p>${skipped ? '今回は不要です。' : done ? '完了済みです。' : '前の操作が終わると進めます。'}</p>`}</details>`;
   }).join('') + `<div class="postgame-action"><p id="postgameActionError" role="alert" hidden style="color:#b42318;margin:0 0 .6rem"></p><button type="button" class="admin-btn admin-btn-primary" id="postgamePrimary">${postgamePrimaryLabel()}</button></div>` +
+    (canDiscardPostgameCsv() ? '<button type="button" class="admin-btn-link" id="postgameDiscardCsv">CSVを取り消して選び直す</button>' : '') +
     (postgame.step === 5 && postgame.switchMessage ? '<p>お知らせの更新は任意です。</p><button type="button" class="admin-btn-link" id="postgameNotice">必要ならお知らせを更新</button>' : '') +
     '<button type="button" class="admin-btn-link" id="postgameReset">別の試合を選ぶ</button>';
   if (postgame.step === 5 && postgame.switchMessage) document.getElementById('postgameNotice').onclick = () => document.querySelector('[data-tab="nextgame"]').click();
+  if (canDiscardPostgameCsv()) document.getElementById('postgameDiscardCsv').onclick = discardPostgameCsv;
   document.getElementById('postgamePrimary').onclick = postgameAction;
   document.getElementById('postgamePrimary').disabled = postgameBusy;
   document.getElementById('postgameReset').onclick = () => {
@@ -3261,6 +3263,21 @@ function renderPostgame(error = '') {
     try { postgame.mode = 'cancelled'; postgame.step = 5; await preparePostgameSwitch(); rememberPostgame(); renderPostgame(); }
     catch (error) { renderPostgame(error.message); }
   };
+}
+function canDiscardPostgameCsv() {
+  return postgame.step === 3 && !postgame.saved && !postgame.uncertain &&
+    !postgame.switchUncertain && !postgame.attempt && !postgame.imp?.attempt;
+}
+function discardPostgameCsv() {
+  if (postgameBusy || !canDiscardPostgameCsv()) return;
+  if (!confirm(`${postgame.label}\n読み込んだCSV・確認内容・実参加者の選択を取り消し、CSVを選び直します。対象試合は保持し、保存済みデータは変更しません。よろしいですか？`)) return;
+  const { id, mode, scheduleId, sourceDate, sourceOpponent, label } = postgame;
+  const unscheduled = mode === 'new' && !scheduleId;
+  postgame = { step: 2, id: unscheduled ? '__new__' : id, mode, scheduleId, sourceDate, sourceOpponent,
+    label: unscheduled ? '日程にない試合（CSV読込後にID発行）' : label,
+    past: !!sourceDate && sourceDate < todayJstDateString() };
+  rememberPostgame();
+  renderPostgame();
 }
 function postgamePrimaryLabel() {
   if (postgame.switchUncertain) return '切替状況を再確認する';

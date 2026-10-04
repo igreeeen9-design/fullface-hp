@@ -822,3 +822,43 @@ test('差し替え確認の先頭は直接差分で、全選手の未変更成�
   assert.match(html,/&lt;img/); assert.doesNotMatch(html,/<img|更新前打率/);
   assert.match(html,/id="csvCommitBtn"/);
 });
+
+test('CSV選び直しは確認後だけ一時情報を破棄し、対象試合と保存済みデータを保持する', async () => {
+  const env = workflowSetup();
+  await selectWorkflow(env);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  env.context.renderPostgame();
+  assert.match(env.element('postgameFlow').innerHTML, /CSVを取り消して選び直す/);
+  const beforeFiles = JSON.stringify([...env.files]);
+  const original = env.state();
+  env.context.confirm = () => false;
+  env.context.discardPostgameCsv();
+  assert.equal(env.state(), original);
+  env.context.confirm = () => true;
+  env.context.discardPostgameCsv();
+  assert.equal(env.state().step, 2);
+  assert.equal(env.state().id, 'today-1');
+  assert.equal(env.state().scheduleId, 'today-1');
+  assert.equal(env.state().imp, undefined);
+  assert.equal(env.state().preview, undefined);
+  assert.equal(JSON.parse(env.storage.get('ffhp_postgame_v1')).step, 2);
+  assert.equal(JSON.stringify([...env.files]), beforeFiles);
+  await env.context.parsePostgameCsv(env.imp.csvText);
+  assert.equal(env.state().step, 3);
+  assert.equal(env.state().imp.game.gameId, 'today-1');
+});
+
+test('CSV選び直しは処理中・保存済み・応答不明・保存試行ありでは実行しない', async () => {
+  for (const patch of ['postgameBusy = true', 'postgame.saved = true', 'postgame.uncertain = true', 'postgame.attempt = {}', 'postgame.imp.attempt = {}', 'postgame.step = 4']) {
+    const env = workflowSetup();
+    await selectWorkflow(env);
+    await env.context.parsePostgameCsv(env.imp.csvText);
+    env.run(patch);
+    const before = JSON.stringify(env.state());
+    let confirmations = 0;
+    env.context.confirm = () => { confirmations++; return true; };
+    env.context.discardPostgameCsv();
+    assert.equal(JSON.stringify(env.state()), before);
+    assert.equal(confirmations, 0);
+  }
+});
