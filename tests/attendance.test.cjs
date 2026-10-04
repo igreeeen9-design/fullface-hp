@@ -800,3 +800,31 @@ test('参加予定を続けて保存しても日程フォームの参照を更�
   assert.equal(row._originalGame, env.run('states.schedule.data.games[0]'));
   assert.ok(!row._originalGame.attendance.members.some(p=>p.name==='井口'));
 });
+
+test('参加予定の括弧違いは同一メンバーになり、端末オーダーの照合とスタメンコピーも統一する', () => {
+  const {ctx:c} = setup();
+  for (const part of ['桜','敬']) {
+    const half = {name:`田中(${part})`,number:'61'};
+    const full = {name:`田中（${part}）`,number:'61'};
+    const options = c.buildAttendanceOptions([full],{members:[half]});
+    assert.equal(options.length,1);
+    assert.equal(options[0].name,full.name);
+    assert.equal(options[0].selected,true);
+    assert.equal(c.attendanceMemberKey(half),c.attendanceMemberKey(full));
+    assert.equal(c.publicAttendance({members:[half]}).members[0].name,full.name);
+    assert.equal(c.lineupFromAttendance({members:[half]})[0].name,full.name);
+  }
+});
+
+test('名簿・スタメン・ベンチの入力は括弧を統一し、コメントや対戦相手は変えない', () => {
+  const {ctx:c,node} = setup();
+  const row = {querySelector: selector => ({value: selector === '.name-input' ? '田中(敬)' : selector === '.comment-input' ? 'コメント(保持)' : ''})};
+  c.document.querySelectorAll = () => [row];
+  node('opponentInput').value='相手(保持)';
+  assert.equal(c.collectRoster()[0].name,'田中（敬）');
+  const form=c.collectNextGameForm();
+  assert.equal(form.lineup[0].name,'田中（敬）');
+  assert.equal(form.bench[0].name,'田中（敬）');
+  assert.equal(form.lineup[0].comment,'コメント(保持)');
+  assert.equal(form.opponent,'相手(保持)');
+});

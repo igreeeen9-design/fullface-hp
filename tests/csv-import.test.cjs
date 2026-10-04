@@ -862,3 +862,59 @@ test('CSV選び直しは処理中・保存済み・応答不明・保存試行�
     assert.equal(confirmations, 0);
   }
 });
+
+test('選手名の括弧はCSVの新規・差し替え共通で全角化し、既存選手へ一度だけ加算する', () => {
+  const {context:c, imp} = setup();
+  for (const name of ['田中（桜）', '田中（敬）', '助っ人（右）']) {
+    const sourceName = imp.playerStats[0].name;
+    const half = name.replace('（','(').replace('）',')');
+    const csv = imp.csvText.replaceAll(sourceName, half);
+    const parsed = c.buildGameImportFromCsv(csv);
+    assert.equal(parsed.playerStats[0].name, name);
+    assert.equal(c.buildGameImportFromCsv(csv, parsed.game.date).playerStats[0].name, name);
+    const players = [{name, gp:0, pa:0, ab:0, h:0, b2:0, b3:0, hr:0, rbi:0, sb:0}];
+    c.applyBattingStatsToPlayers(players, [parsed.playerStats[0]]);
+    assert.equal(players.length, 1);
+    assert.equal(players[0].gp, 1);
+    assert.equal(players[0].pa, parsed.playerStats[0].stats.PA);
+  }
+  assert.equal(c.normalizePlayerNameBrackets('髙橋 A B'), '髙橋 A B');
+});
+
+test('括弧統一のデータ移行は元CSVから再集計し、他選手を保持して再実行でも加算しない', () => {
+  const os = require('node:os');
+  const {execFileSync} = require('node:child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fullface-names-'));
+  try {
+    const {context:c, imp} = setup();
+    fs.mkdirSync(path.join(dir, 'data/raw-games'), {recursive:true});
+    fs.copyFileSync(path.join(root,'admin.html'), path.join(dir,'admin.html'));
+    const name = '田中（桜）';
+    const raw = imp.csvText.replaceAll(imp.playerStats[0].name, name);
+    const half = raw.replaceAll(name, '田中(桜)');
+    const game = c.buildGameImportFromCsv(raw).game;
+    fs.writeFileSync(path.join(dir,'data/raw-games/a.csv'), raw);
+    fs.writeFileSync(path.join(dir,'data/raw-games/b.csv'), half);
+    const players = [];
+    c.applyBattingStatsToPlayers(players, [c.buildGameImportFromCsv(raw).playerStats[0]]);
+    const first = players[0];
+    const other = {name:'変更しない選手',gp:9,pa:20,ab:18,h:7,avg:'.389'};
+    const stats = {seasonRanking:{players:[first,{...first,name:'田中(桜)'},other],categories:[]}};
+    fs.writeFileSync(path.join(dir,'data/stats.json'), JSON.stringify(stats,null,2));
+    fs.writeFileSync(path.join(dir,'data/results.json'), JSON.stringify({groups:[{era:'current',games:[{...game,rawCsvPath:'data/raw-games/a.csv'},{...game,rawCsvPath:'data/raw-games/b.csv'}]}]},null,2));
+    const migrate = () => execFileSync(process.execPath,[path.join(root,'scripts/normalize-player-brackets.cjs'),'--root',dir,'--write']);
+    migrate();
+    const after = fs.readFileSync(path.join(dir,'data/stats.json'),'utf8');
+    const ranking = JSON.parse(after).seasonRanking;
+    assert.equal(ranking.players.length,2);
+    assert.deepEqual(ranking.players[1],other);
+    assert.equal(ranking.players[0].gp,2);
+    for(const key of ['pa','ab','h','b2','b3','hr','rbi','sb']) assert.equal(ranking.players[0][key],first[key]*2);
+    const expected = clone(ranking);
+    c.recomputeSeasonCategories(expected);
+    assert.deepEqual(ranking.categories,clone(expected.categories));
+    assert.ok(!fs.readFileSync(path.join(dir,'data/raw-games/b.csv'),'utf8').includes('田中(桜)'));
+    migrate();
+    assert.equal(fs.readFileSync(path.join(dir,'data/stats.json'),'utf8'), after);
+  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+});

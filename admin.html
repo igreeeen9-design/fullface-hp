@@ -972,13 +972,13 @@ let attendanceReady = false;
 let attendanceLegacyCurrent = null;
 
 function attendanceMemberKey(member) {
-  return JSON.stringify([member.name, member.number]);
+  return JSON.stringify([normalizePlayerNameBrackets(member.name), member.number]);
 }
 
 // 公開参加予定と仮オーダーを分離。旧公開JSONの仮オーダーは使用しない。
 function publicAttendance(attendance) {
   if (!attendance) return attendance;
-  return { ...attendance, members: (attendance.members || []).map(member => ({ name: member.name, number: member.number ?? '' })) };
+  return { ...attendance, members: (attendance.members || []).map(member => ({ name: normalizePlayerNameBrackets(member.name), number: member.number ?? '' })) };
 }
 function publicSchedule(data) {
   return { ...data, games: data.games.map(game => game.attendance
@@ -1030,7 +1030,7 @@ document.getElementById('saveAttendancePlanBtn').addEventListener('click', saveA
 function buildAttendanceOptions(roster, attendance) {
   const options = new Map();
   const add = (member, selected) => {
-    const item = { name: String(member.name || '').trim(), number: String(member.number || '').trim(), selected };
+    const item = { name: normalizePlayerNameBrackets(member.name).trim(), number: String(member.number || '').trim(), selected };
     if (!item.name) return;
     const key = attendanceMemberKey(item);
     if (!options.has(key)) options.set(key, item);
@@ -1136,7 +1136,7 @@ document.getElementById('attendanceOptions').addEventListener('change', (e) => {
 
 document.getElementById('addAttendanceGuestBtn').addEventListener('click', () => {
   if (!attendanceReady || !selectedAttendanceGame()) return;
-  const name = document.getElementById('attendanceGuestName').value.trim();
+  const name = normalizePlayerNameBrackets(document.getElementById('attendanceGuestName').value.trim());
   const number = document.getElementById('attendanceGuestNumber').value.trim();
   if (!name) {
     document.getElementById('attendanceEditorStatus').textContent = '追加する参加者の名前を入力してください。';
@@ -1187,7 +1187,7 @@ async function saveAttendance() {
 
 // 明示操作で保存済み参加予定から独立した案を作る。公開は既存の公開ボタンで行う。
 function lineupFromAttendance(attendance) {
-  return (attendance?.members || []).map(member => ({ name: member.name, number: member.number || '',
+  return (attendance?.members || []).map(member => ({ name: normalizePlayerNameBrackets(member.name), number: member.number || '',
     order: member.order ?? '', position: member.position || '', comment: '' }))
     .sort((a, b) => (a.order === '' ? Infinity : Number(a.order)) - (b.order === '' ? Infinity : Number(b.order)));
 }
@@ -1237,14 +1237,14 @@ function fillNextGameForm(current) {
 function collectNextGameForm() {
   const lineup = Array.from(document.querySelectorAll('#lineupRows .lineup-row')).map((row, i) => ({
     order: row._plannedOrder ?? i + 1,
-    name: row.querySelector('.name-input').value.trim(),
+    name: normalizePlayerNameBrackets(row.querySelector('.name-input').value.trim()),
     number: row.querySelector('.number-input').value.trim(),
     position: row.querySelector('.pos-input').value.trim(),
     comment: row.querySelector('.comment-input').value.trim(),
   })).filter((p) => p.name || p.number || p.position || p.comment);
 
   const bench = Array.from(document.querySelectorAll('#benchRows .bench-row')).map((row) => ({
-    name: row.querySelector('.name-input').value.trim(),
+    name: normalizePlayerNameBrackets(row.querySelector('.name-input').value.trim()),
     number: row.querySelector('.number-input').value.trim(),
   })).filter((b) => b.name || b.number);
 
@@ -1929,7 +1929,7 @@ const resultBoxscores = new WeakMap();
 
 // 過去の元CSVで使われたフルネーム・交代記号を既存の通算成績の表記に合わせる。
 function normalizeResultPlayerName(name) {
-  const normalized = normalizePlayerName(String(name || '').trim().replace(/^→/, '').replace(/\(/g, '（').replace(/\)/g, '）'));
+  const normalized = normalizePlayerName(String(name || '').trim().replace(/^→/, ''));
   const aliases = { '田中敬治': '田中（敬）', '田中桜奨': '田中（桜）', '工藤由陽': '工藤（由）', '工藤亮': '工藤' };
   return aliases[normalized] || normalized;
 }
@@ -2159,8 +2159,12 @@ function zenkakuDigitsToHalf(str) {
 // 表記(高橋)と一致しないと別選手として扱われてしまう。既知の異体字だけ標準字体に
 // 揃えておく(新しい表記ゆれが見つかった場合はこの対応表に追加する)。
 const KANJI_VARIANT_MAP = { '髙': '高', '﨑': '崎', '齋': '斎', '齊': '斉', '德': '徳', '桒': '桑' };
+// 選手名だけに適用する共通の括弧正規化。チーム名・コメント・下書き名は対象外。
+function normalizePlayerNameBrackets(name) {
+  return String(name || '').replace(/\(/g, '（').replace(/\)/g, '）');
+}
 function normalizePlayerName(name) {
-  return String(name || '').replace(/[髙﨑齋齊德桒]/g, (c) => KANJI_VARIANT_MAP[c] || c);
+  return normalizePlayerNameBrackets(name).replace(/[髙﨑齋齊德桒]/g, (c) => KANJI_VARIANT_MAP[c] || c);
 }
 
 // 1打席分のセルをCSV集計用コード(1B/2B/3B/HR/BB/HBP/SO/OUT/SH/SF)に分類する。
@@ -2378,11 +2382,12 @@ function parseRateValue(s) {
 // 二重取り込みによる二重加算は打撃成績と同様に防がれる。
 function applyBattingStatsToPlayers(players, playerStats) {
   playerStats.forEach((p) => {
-    let rec = players.find((x) => x.name === p.name);
+    let rec = players.find((x) => normalizePlayerNameBrackets(x.name) === normalizePlayerNameBrackets(p.name));
     if (!rec) {
       rec = { name: p.name, gp: 0, pa: 0, ab: 0, h: 0, b2: 0, b3: 0, hr: 0, rbi: 0, sb: 0, avg: '.000', obp: '.000', slg: '.000', ops: '.000' };
       players.push(rec);
     }
+    rec.name = normalizePlayerNameBrackets(rec.name);
     rec.gp += 1;
     rec.pa += p.stats.PA;
     rec.ab += p.stats.AB;
@@ -2794,7 +2799,7 @@ function renderCsvPreviewHtml(imp) {
   const { game, playerStats, groupLabel, statsData } = imp;
   const newPlayers = [];
   const rows = playerStats.map((p) => {
-    const before = statsData.seasonRanking.players.find((x) => x.name === p.name);
+    const before = statsData.seasonRanking.players.find((x) => normalizePlayerNameBrackets(x.name) === normalizePlayerNameBrackets(p.name));
     if (!before) newPlayers.push(p.name);
     return `<tr${before ? '' : ' style="background:#fff3cd;"'}>
       <td>${escapeAttr(p.name)}</td>
@@ -3042,7 +3047,7 @@ function renderRoster(roster) {
 function collectRoster() {
   return Array.from(document.querySelectorAll('#rosterRows .roster-row')).map((row) => ({
     number: row.querySelector('.number-input').value.trim(),
-    name: row.querySelector('.name-input').value.trim(),
+    name: normalizePlayerNameBrackets(row.querySelector('.name-input').value.trim()),
     position: row.querySelector('.position-input').value.trim(),
   })).filter((p) => p.name);
 }
