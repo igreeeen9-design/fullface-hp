@@ -582,12 +582,16 @@
 
     <section class="admin-card">
       <h2>下書き</h2>
-      <p class="admin-note">今の入力内容を、名前を付けて何件でも下書きとして保存できます。保存・読み込みとも、その場では公開されません。</p>
+      <p class="admin-note">下書きはこのブラウザに保存され、別端末とは共有されません。公開するまではサイトに反映されません。</p>
       <div class="field">
         <label for="draftNameInput">下書き名(任意)</label>
         <input type="text" id="draftNameInput" placeholder="例: 守備重視(空欄の場合は「案1」のように自動採番)">
       </div>
       <button type="button" class="add-row-btn" id="saveDraftBtn">下書きとして保存</button>
+      <p class="admin-note">旧下書きが公開JSONにある場合は、普段使うこのブラウザで移行してください。バックアップは大切に保管してください。</p>
+      <button type="button" class="add-row-btn" id="migrateDraftsBtn">公開下書きをバックアップ・端末へ移行</button>
+      <button type="button" class="admin-btn-link" id="exportDraftsBtn">下書きJSONをエクスポート</button>
+      <label>下書きJSONをインポート<input type="file" id="importDraftsFile" accept=".json,application/json"></label>
       <div id="draftListArea" style="margin-top:1rem;"></div>
     </section>
 
@@ -834,7 +838,14 @@ async function ghGet(path) {
   return res.json();
 }
 
-async function ghPut(path, newDataObj, sha, message) {
+async function ghPut(path, newDataObj, sha, message, options = {}) {
+  if (path === FILES.nextGame) {
+    const latest = await ghGet(path);
+    if (latest.sha !== sha) throw new Error('SHA競合：最新データを再取得してください。');
+    const remote = JSON.parse(base64ToUtf8(latest.content));
+    if (legacyDrafts(remote).length && !options.removeDrafts) throw new Error('公開JSONに旧下書きがあります。先に「公開下書きをバックアップ・端末へ移行」を実行してください。');
+    newDataObj = withoutDefaultOrder(newDataObj);
+  }
   const content = utf8ToBase64(JSON.stringify(newDataObj, null, 2));
   const res = await fetch(`https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}`, {
     method: 'PUT',
@@ -1260,31 +1271,156 @@ function collectNextGameForm() {
   };
 }
 
-// 下書きは公開JSONのdraftsに保存する。ページ表示への反映は「公開する」時のみ。
-// 旧形式(draft単体)は読み込み時にdraftsへ変換する。
-// 廃止したキーだけを除き、未知の項目や取り消し情報も保持する。元データは変更しない。
+// 下書きの正本はこのブラウザのみ。公開JSONの旧下書きは明示移行するまで保護する。
+function localDraftKey() {
+  return 'ffhp_nextgame_drafts_v1:' + JSON.stringify([CONFIG.owner, CONFIG.repo, CONFIG.branch]);
+}
+function validateDraftRecords(records) {
+  if (!Array.isArray(records)) throw new Error('下書き一覧の形式が不正です。');
+  const ids = new Set();
+  for (const record of records) {
+    const d = record?.content;
+    if (!record || typeof record.id !== 'string' || !record.id || ids.has(record.id) || !d || typeof d !== 'object' || Array.isArray(d)) throw new Error('下書きIDまたは内容の形式が不正です。');
+    ids.add(record.id);
+    for (const key of ['name', 'savedAt', 'opponent', 'date', 'startTime', 'meetTime', 'location', 'note']) {
+      if (d[key] !== undefined && typeof d[key] !== 'string') throw new Error('下書きの文字項目が不正です。');
+    }
+    for (const key of ['lineup', 'bench']) {
+      if (d[key] !== undefined && (!Array.isArray(d[key]) || d[key].some(p => !p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string' || ['number', 'position', 'comment'].some(k => p[k] !== undefined && typeof p[k] !== 'string') || (p.order !== undefined && typeof p.order !== 'string' && typeof p.order !== 'number')))) throw new Error('下書きの選手一覧が不正です。');
+    }
+  }
+  return records;
+}
+function parseDraftBackup(text) {
+  const data = JSON.parse(text);
+  if (data.format !== 'ffhp-nextgame-drafts' || data.version !== 1) throw new Error('対応していない下書きファイルです。');
+  return validateDraftRecords(data.drafts);
+}
+function readLocalDrafts() {
+  const raw = localStorage.getItem(localDraftKey());
+  return raw === null || raw === '' ? [] : parseDraftBackup(raw);
+}
+function draftBackupText(records) {
+  validateDraftRecords(records);
+  return JSON.stringify({ format: 'ffhp-nextgame-drafts', version: 1, drafts: records }, null, 2);
+}
+function writeLocalDrafts(records) {
+  // 壊れた既存データを黙って上書きしない。
+  readLocalDrafts();
+  const text = draftBackupText(records);
+  localStorage.setItem(localDraftKey(), text);
+  if (localStorage.getItem(localDraftKey()) !== text || JSON.stringify(readLocalDrafts()) !== JSON.stringify(records)) throw new Error('端末保存の読み戻し検証に失敗しました。公開下書きは削除しません。');
+}
+function mergeLocalDrafts(incoming) {
+  validateDraftRecords(incoming);
+  const records = readLocalDrafts();
+  for (const item of incoming) {
+    const same = records.find(r => r.id === item.id);
+    if (same && stableDraftJson(same.content) !== stableDraftJson(item.content)) throw new Error('同じIDに異なる下書きがあります。上書きせず停止しました。');
+    if (!same) records.push(item);
+  }
+  writeLocalDrafts(records);
+  return records;
+}
+function legacyDrafts(data) {
+  if (data.drafts !== undefined && !Array.isArray(data.drafts)) throw new Error('公開下書きの形式が不正です。');
+  return [...(data.drafts || []), ...(data.draft ? [data.draft] : [])];
+}
+function stableDraftJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableDraftJson).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableDraftJson(value[k])).join(',') + '}';
+  return JSON.stringify(value);
+}
+async function legacyDraftRecords(data) {
+  const counts = new Map();
+  const records = [];
+  for (const content of legacyDrafts(data)) {
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableDraftJson(content)));
+    const hash = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
+    const n = (counts.get(hash) || 0) + 1; counts.set(hash, n);
+    records.push({ id: `legacy-${hash}-${n}`, content });
+  }
+  return validateDraftRecords(records);
+}
+function downloadDraftBackup(records) {
+  const url = URL.createObjectURL(new Blob([draftBackupText(records)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = 'fullface-nextgame-drafts.json';
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+let draftMigrationBusy = false;
+async function migratePublicDrafts(download = downloadDraftBackup, approve = confirm) {
+  if (draftMigrationBusy) return;
+  draftMigrationBusy = true;
+  try {
+    const latest = await ghGet(FILES.nextGame);
+    const data = JSON.parse(base64ToUtf8(latest.content));
+    const incoming = await legacyDraftRecords(data);
+    if (!incoming.length) { showStatus('ok', '移行する公開下書きはありません。'); return; }
+    download(incoming);
+    mergeLocalDrafts(incoming);
+    if (!approve(`${incoming.length}件の公開下書きをこのブラウザに保存・検証しました。バックアップJSONが保存されたことを確認してください。公開JSONから下書きを除去しますか？（過去のGit履歴は残ります）`)) { showStatus('ok', '端末へのコピーを保存しました。公開JSONは変更していません。'); return; }
+    // ダイアログ表示中に端末保存が消された場合も、削除より先に再検証する。
+    mergeLocalDrafts(incoming);
+    try {
+      const cleaned = withoutDefaultOrder(data);
+      const result = await ghPut(FILES.nextGame, cleaned, latest.sha, '下書きを端末へ移行し公開JSONから除去', { removeDrafts: true });
+      states.nextGame = { sha: result.content.sha, data: cleaned };
+    } catch (error) {
+      const newest = await ghGet(FILES.nextGame);
+      const actual = JSON.parse(base64ToUtf8(newest.content));
+      mergeLocalDrafts(await legacyDraftRecords(actual));
+      states.nextGame = { sha: newest.sha, data: actual };
+      if ('drafts' in actual || 'draft' in actual) throw new Error('保存は完了していません。最新の公開下書きも端末へ保護しました。再度移行してください。' + error.message);
+      // 応答消失でも、キー除去を最新JSONで確認できた場合だけ成功とする。
+    }
+    showStatus('ok', '公開JSONから下書きを除去しました。このブラウザの下書きは保持しています。');
+  } catch (error) { showStatus('err', '移行を停止しました：' + error.message); }
+  finally { draftMigrationBusy = false; renderDraftList(); renderNextGameStatus(); }
+}
+function exportLocalDrafts() {
+  try { downloadDraftBackup(readLocalDrafts()); showStatus('ok', '下書きJSONをエクスポートしました。'); }
+  catch (error) { showStatus('err', error.message); }
+}
+async function importLocalDrafts(event) {
+  try {
+    const file = event.target.files?.[0]; if (!file) return;
+    mergeLocalDrafts(parseDraftBackup(await file.text()));
+    renderDraftList(); renderNextGameStatus(); showStatus('ok', '下書きを取り込みました。同じIDは重複追加していません。');
+  } catch (error) { showStatus('err', error.message); }
+  finally { event.target.value = ''; }
+}
+document.getElementById('migrateDraftsBtn').addEventListener('click', () => migratePublicDrafts());
+document.getElementById('exportDraftsBtn').addEventListener('click', exportLocalDrafts);
+document.getElementById('importDraftsFile').addEventListener('change', importLocalDrafts);
+
+// 公開保存では非公開下書きと廃止キーを引き継がない。
 function withoutDefaultOrder(data) {
-  const { defaultOrder, ...remaining } = data;
+  const { defaultOrder, drafts, draft, ...remaining } = data;
   return remaining;
 }
 function renderNextGameStatus() {
   const box = document.getElementById('nextGameStatusInfo');
   const data = states.nextGame && states.nextGame.data;
-  if (!box || !data) return;
-  const cur = data.current || {};
+  if (!box) return;
+  const cur = data?.current || {};
   const curLabel = cur.opponent
     ? `${escapeAttr(cur.opponent)}(${escapeAttr(formatDateOnly(cur.date) || cur.date || '未定')})・スタメン${(cur.lineup || []).length}人`
     : '未設定';
-  const draftCount = (data.drafts || []).length;
+  let draftCount;
+  try { draftCount = readLocalDrafts().length; } catch (_) { draftCount = '読み込み失敗'; }
   let html = `<p class="admin-note" style="margin:0 0 0.4rem;">🌐 現在サイトに公開中: <strong>${curLabel}</strong></p>`;
   html += `<p class="admin-note" style="margin:0;">📝 保存済みの下書き: ${draftCount}件</p>`;
+  if (data && legacyDrafts(data).length) html += '<p class="admin-note">公開JSONに旧下書きが残っています。バックアップ・端末への移行を行ってください。</p>';
   box.innerHTML = html;
 }
 
 function renderDraftList() {
   const container = document.getElementById('draftListArea');
   if (!container) return;
-  const drafts = (states.nextGame && states.nextGame.data.drafts) || [];
+  let records;
+  try { records = readLocalDrafts(); } catch (error) { container.textContent = '端末下書きを読み込めません：' + error.message; return; }
+  const drafts = records.map(r => r.content);
   if (!drafts.length) {
     container.innerHTML = '<p class="admin-note">保存済みの下書きはありません。</p>';
     return;
@@ -1306,8 +1442,8 @@ function renderDraftList() {
           <div class="admin-note" style="margin:0.2rem 0 0;">${opponentLabel}・スタメン${lineup.length}人・保存: ${escapeAttr(savedLabel)}</div>
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
-          <button type="button" class="admin-btn-link" data-act="loadDraft" data-index="${i}">読み込む</button>
-          <button type="button" class="admin-btn-link" data-act="delDraft" data-index="${i}" style="color:var(--red);">削除</button>
+          <button type="button" class="admin-btn-link" data-act="loadDraft" data-id="${escapeAttr(records[i].id)}">読み込む</button>
+          <button type="button" class="admin-btn-link" data-act="delDraft" data-id="${escapeAttr(records[i].id)}" style="color:var(--red);">削除</button>
         </div>
         <details class="draft-preview">
           <summary>内容を見る(スタメン${lineup.length}人)</summary>
@@ -1319,16 +1455,13 @@ function renderDraftList() {
 }
 
 async function loadNextGame() {
+  renderDraftList(); // 通信できなくても端末の案は読み込める。
   showStatus('loading', '読み込み中...');
   try {
     const json = await ghGet(FILES.nextGame);
     const data = JSON.parse(base64ToUtf8(json.content));
     if (!data.history) data.history = [];
     if (!data.current) data.current = {};
-    if (!Array.isArray(data.drafts)) {
-      // 旧形式(draft単体)からの移行。既存の下書きを失わないよう drafts[0] に変換する
-      data.drafts = data.draft ? [{ name: '案1', ...data.draft }] : [];
-    }
     states.nextGame = { sha: json.sha, data };
     fillNextGameForm(data.current);
     renderNextGameStatus();
@@ -1341,55 +1474,33 @@ async function loadNextGame() {
 }
 
 async function saveDraft() {
-  const btn = document.getElementById('saveDraftBtn');
-  btn.disabled = true;
-  showStatus('loading', '下書きを保存中...');
   try {
-    const data = states.nextGame.data;
-    const drafts = (data.drafts || []).slice();
-    const nameInput = document.getElementById('draftNameInput');
-    const name = nameInput.value.trim() || `案${drafts.length + 1}`;
-    const draft = collectNextGameForm();
-    draft.name = name;
-    draft.savedAt = new Date().toISOString();
-    drafts.push(draft);
-    const newData = { ...withoutDefaultOrder(data), current: data.current, drafts, history: data.history || [] };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, `次戦情報の下書き「${name}」を保存`);
-    states.nextGame = { sha: json.content.sha, data: newData };
-    nameInput.value = '';
-    renderDraftList();
-    renderNextGameStatus();
-    showStatus('ok', `下書き「${name}」を保存しました。まだ一般公開ページには反映されていません。`);
-  } catch (e) {
-    showStatus('err', e.message || String(e));
-  } finally {
-    btn.disabled = false;
-  }
+    const records = readLocalDrafts();
+    const input = document.getElementById('draftNameInput');
+    const content = { ...collectNextGameForm(), name: input.value.trim() || `案${records.length + 1}`, savedAt: new Date().toISOString() };
+    records.push({ id: crypto.randomUUID(), content });
+    writeLocalDrafts(records);
+    input.value = ''; renderDraftList(); renderNextGameStatus();
+    showStatus('ok', '下書きをこのブラウザに保存しました。');
+  } catch (error) { showStatus('err', '端末下書きを保存できません：' + error.message); }
 }
-
-async function deleteDraft(index) {
-  showStatus('loading', '下書きを削除中...');
+async function deleteDraft(id) {
   try {
-    const data = states.nextGame.data;
-    const drafts = (data.drafts || []).slice();
-    drafts.splice(index, 1);
-    const newData = { ...withoutDefaultOrder(data), current: data.current, drafts, history: data.history || [] };
-    const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報の下書きを削除');
-    states.nextGame = { sha: json.content.sha, data: newData };
-    renderDraftList();
-    renderNextGameStatus();
-    showStatus('ok', '下書きを削除しました。');
-  } catch (e) {
-    showStatus('err', e.message || String(e));
-  }
+    const records = readLocalDrafts();
+    const index = records.findIndex(r => r.id === id);
+    if (index < 0) throw new Error('下書きが見つかりません。再読み込みしてください。');
+    records.splice(index, 1); writeLocalDrafts(records);
+    renderDraftList(); renderNextGameStatus(); showStatus('ok', '端末の下書きを削除しました。');
+  } catch (error) { showStatus('err', error.message); }
 }
 
 document.getElementById('draftListArea').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  const index = Number(btn.dataset.index);
-  const drafts = (states.nextGame && states.nextGame.data.drafts) || [];
-  const d = drafts[index];
+  let records;
+  try { records = readLocalDrafts(); } catch (error) { showStatus('err', error.message); return; }
+  const index = records.findIndex(r => r.id === btn.dataset.id);
+  const d = records[index]?.content;
   if (!d) return;
   const label = d.name || `案${index + 1}`;
   if (btn.dataset.act === 'loadDraft') {
@@ -1397,7 +1508,7 @@ document.getElementById('draftListArea').addEventListener('click', (e) => {
     showStatus('ok', `下書き「${label}」を読み込みました(まだ公開されていません)。`);
   } else if (btn.dataset.act === 'delDraft') {
     if (!confirm(`下書き「${label}」を削除しますか?`)) return;
-    deleteDraft(index);
+    deleteDraft(btn.dataset.id);
   }
 });
 
@@ -1411,7 +1522,7 @@ async function saveCurrent() {
     const data = states.nextGame.data;
     if (data.current && data.current.attendance) current.attendance = data.current.attendance; // 旧形式の読み取り互換
     if (data.current && data.current.scheduleGameId) current.scheduleGameId = data.current.scheduleGameId;
-    const newData = { ...withoutDefaultOrder(data), current, drafts: data.drafts || [], history: data.history || [] };
+    const newData = { ...withoutDefaultOrder(data), current, history: data.history || [] };
     const json = await ghPut(FILES.nextGame, newData, states.nextGame.sha, '次戦情報を公開');
     states.nextGame = { sha: json.content.sha, data: newData };
     renderNextGameStatus();
@@ -1508,7 +1619,7 @@ async function archiveAndClear(action, expectedGameId) {
       ? { opponent: nextGame.opponent || '', date: nextGame.date || '', startTime: normalizeTimeForInput(nextGame.time), meetTime: '', location: nextGame.location || '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() }
       : { opponent: '', date: '', startTime: '', meetTime: '', location: '', lineup: [], bench: [], note: '', updatedAt: new Date().toISOString() };
     if (nextGame && nextGame.id) blankCurrent.scheduleGameId = nextGame.id;
-    const newData = { ...withoutDefaultOrder(data), current: blankCurrent, drafts: data.drafts || [], history: newHistory };
+    const newData = { ...withoutDefaultOrder(data), current: blankCurrent, history: newHistory };
     if (!confirm(`対象：${transitionLabel(data.current)}\n操作：${cancelled ? '雨天中止' : '終了'}\n切替後：${transitionLabel(blankCurrent)}`)) return;
     newData.lastTransitionUndo = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, beforeCurrent: data.current, afterCurrent: blankCurrent, beforeHistory: history, entry: newHistory[newHistory.length - 1] };
     const json = await saveTransitionVerified(newData, latest.sha, cancelled ? '雨天中止: 試合IDを履歴に保存し、次の試合をセット' : '試合終了: 次戦情報を履歴に保存し、次の試合をセット');
