@@ -36,10 +36,10 @@ test('下書き保存・読込・削除・同名追加は端末だけで完結',
   assert.equal(e.form.name,'同名');
   await c.deleteDraft(id);assert.equal(c.readLocalDrafts().length,1);assert.equal(e.puts,0);
 });
-test('移行専用UI・処理はなく、端末保存と入出力UIは維持',()=>{
+test('移行・入出力専用UIと処理はなく、端末保存UIは維持',()=>{
   const html=fs.readFileSync(path.join(__dirname,'../admin.html'),'utf8');
-  assert.doesNotMatch(html,/migrateDraftsBtn|migratePublicDrafts|legacyDraftRecords|draftMigrationBusy|removeDrafts|公開下書きをバックアップ/);
-  for(const id of ['saveDraftBtn','draftListArea','exportDraftsBtn','importDraftsFile']) assert.ok(html.includes(`id="${id}"`));
+  assert.doesNotMatch(html,/migrateDraftsBtn|migratePublicDrafts|legacyDraftRecords|draftMigrationBusy|removeDrafts|公開下書きをバックアップ|exportDraftsBtn|importDraftsFile|exportLocalDrafts|importLocalDrafts|downloadDraftBackup|mergeLocalDrafts|stableDraftJson/);
+  for(const id of ['saveDraftBtn','draftListArea']) assert.ok(html.includes(`id="${id}"`));
 });
 for(const failure of ['write','verify','read'])test(`端末${failure}失敗は表示し、公開JSONには書き込まない`,async()=>{
   const e=setup();
@@ -49,15 +49,17 @@ for(const failure of ['write','verify','read'])test(`端末${failure}失敗は�
   await e.c.saveDraft();
   assert.equal(e.puts,0);assert.equal(e.gets,0);assert.deepEqual(e.remote,e.original);assert.equal(e.status.type,'err');
 });
-test('エクスポート・インポートは全内容保持、同IDは重複せず異なる内容なら停止',async()=>{
-  const e=setup();const records=e.original.drafts.map((content,i)=>({id:`existing-${i}`,content}));
-  const parsed=e.c.parseDraftBackup(e.c.draftBackupText(records));e.c.mergeLocalDrafts(parsed);e.c.mergeLocalDrafts(parsed);
-  assert.equal(e.c.readLocalDrafts().length,7);
-  const changed=clone(parsed);changed[0].content.note='different';
-  assert.throws(()=>e.c.mergeLocalDrafts(changed),/同じID/);
-  assert.deepEqual(clone(e.c.readLocalDrafts()),clone(records));
+test('既存の保存キー・形式の下書きを内容とIDを変えず読み書きできる',()=>{
+  const e=setup();const records=e.original.drafts.map((content,i)=>({id:`legacy-existing-${i}`,content}));
+  const key='ffhp_nextgame_drafts_v1:'+JSON.stringify(['igreeeen9-design','fullface-hp','main']);
+  const text=JSON.stringify({format:'ffhp-nextgame-drafts',version:1,drafts:records},null,2);
+  e.storage.set(key,text);
+  assert.equal(e.c.localDraftKey(),key);
+  assert.deepEqual(clone(e.c.readLocalDrafts()),records);
+  e.c.writeLocalDrafts(e.c.readLocalDrafts());assert.equal(e.storage.get(key),text);
   assert.throws(()=>e.c.parseDraftBackup('{"version":99}'));
-  assert.throws(()=>e.c.mergeLocalDrafts([{id:'x',content:{lineup:'invalid'}}]));
+  assert.throws(()=>e.c.writeLocalDrafts([{id:'x',content:{lineup:'invalid'}}]));
+  assert.equal(e.storage.get(key),text);assert.equal(e.puts,0);
 });
 test('旧draft単体が残る場合も公開保存せず既存データを保護',async()=>{
   const e=setup();delete e.remote.drafts;e.remote.draft=e.original.drafts[6];
@@ -75,13 +77,13 @@ test('共通の公開保存入口は旧下書き存在時に停止、旧下書�
 });
 
 test('通信失敗でも端末の下書き一覧を表示し、読み込み時にGitHubへ書かない',async()=>{
-  const e=setup();e.c.mergeLocalDrafts(e.original.drafts.map((content,i)=>({id:`existing-${i}`,content})));
+  const e=setup();e.c.writeLocalDrafts(e.original.drafts.map((content,i)=>({id:`existing-${i}`,content})));
   e.c.fetch=async()=>{throw new Error('offline');};
   await e.c.loadNextGame();
   assert.match(e.node('draftListArea').innerHTML,/案7/);assert.equal(e.puts,0);
 });
 test('公開時はフォームのcurrentだけを更新し、端末下書きは保持する',async()=>{
-  const e=setup();e.c.mergeLocalDrafts(e.original.drafts.map((content,i)=>({id:`existing-${i}`,content})));
+  const e=setup();e.c.writeLocalDrafts(e.original.drafts.map((content,i)=>({id:`existing-${i}`,content})));
   delete e.remote.drafts;await e.c.loadNextGame();
   const saved=e.c.draftBackupText(e.c.readLocalDrafts());
   e.node('opponentInput').value='次の相手';

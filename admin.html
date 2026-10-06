@@ -588,8 +588,6 @@
         <input type="text" id="draftNameInput" placeholder="例: 守備重視(空欄の場合は「案1」のように自動採番)">
       </div>
       <button type="button" class="add-row-btn" id="saveDraftBtn">下書きとして保存</button>
-      <button type="button" class="admin-btn-link" id="exportDraftsBtn">下書きJSONをエクスポート</button>
-      <label>下書きJSONをインポート<input type="file" id="importDraftsFile" accept=".json,application/json"></label>
       <div id="draftListArea" style="margin-top:1rem;"></div>
     </section>
 
@@ -1309,47 +1307,10 @@ function writeLocalDrafts(records) {
   localStorage.setItem(localDraftKey(), text);
   if (localStorage.getItem(localDraftKey()) !== text || JSON.stringify(readLocalDrafts()) !== JSON.stringify(records)) throw new Error('端末保存の読み戻し検証に失敗しました。');
 }
-function mergeLocalDrafts(incoming) {
-  validateDraftRecords(incoming);
-  const records = readLocalDrafts();
-  for (const item of incoming) {
-    const same = records.find(r => r.id === item.id);
-    if (same && stableDraftJson(same.content) !== stableDraftJson(item.content)) throw new Error('同じIDに異なる下書きがあります。上書きせず停止しました。');
-    if (!same) records.push(item);
-  }
-  writeLocalDrafts(records);
-  return records;
-}
 function legacyDrafts(data) {
   if (data.drafts !== undefined && !Array.isArray(data.drafts)) throw new Error('公開下書きの形式が不正です。');
   return [...(data.drafts || []), ...(data.draft ? [data.draft] : [])];
 }
-function stableDraftJson(value) {
-  if (Array.isArray(value)) return '[' + value.map(stableDraftJson).join(',') + ']';
-  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableDraftJson(value[k])).join(',') + '}';
-  return JSON.stringify(value);
-}
-function downloadDraftBackup(records) {
-  const url = URL.createObjectURL(new Blob([draftBackupText(records)], { type: 'application/json' }));
-  const link = document.createElement('a'); link.href = url; link.download = 'fullface-nextgame-drafts.json';
-  document.body.appendChild(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function exportLocalDrafts() {
-  try { downloadDraftBackup(readLocalDrafts()); showStatus('ok', '下書きJSONをエクスポートしました。'); }
-  catch (error) { showStatus('err', error.message); }
-}
-async function importLocalDrafts(event) {
-  try {
-    const file = event.target.files?.[0]; if (!file) return;
-    mergeLocalDrafts(parseDraftBackup(await file.text()));
-    renderDraftList(); renderNextGameStatus(); showStatus('ok', '下書きを取り込みました。同じIDは重複追加していません。');
-  } catch (error) { showStatus('err', error.message); }
-  finally { event.target.value = ''; }
-}
-document.getElementById('exportDraftsBtn').addEventListener('click', exportLocalDrafts);
-document.getElementById('importDraftsFile').addEventListener('change', importLocalDrafts);
-
 // 公開保存では非公開下書きと廃止キーを引き継がない。
 function withoutDefaultOrder(data) {
   const { defaultOrder, drafts, draft, ...remaining } = data;
