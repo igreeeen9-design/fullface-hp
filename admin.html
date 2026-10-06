@@ -588,8 +588,6 @@
         <input type="text" id="draftNameInput" placeholder="例: 守備重視(空欄の場合は「案1」のように自動採番)">
       </div>
       <button type="button" class="add-row-btn" id="saveDraftBtn">下書きとして保存</button>
-      <p class="admin-note">旧下書きが公開JSONにある場合は、普段使うこのブラウザで移行してください。バックアップは大切に保管してください。</p>
-      <button type="button" class="add-row-btn" id="migrateDraftsBtn">公開下書きをバックアップ・端末へ移行</button>
       <button type="button" class="admin-btn-link" id="exportDraftsBtn">下書きJSONをエクスポート</button>
       <label>下書きJSONをインポート<input type="file" id="importDraftsFile" accept=".json,application/json"></label>
       <div id="draftListArea" style="margin-top:1rem;"></div>
@@ -838,12 +836,12 @@ async function ghGet(path) {
   return res.json();
 }
 
-async function ghPut(path, newDataObj, sha, message, options = {}) {
+async function ghPut(path, newDataObj, sha, message) {
   if (path === FILES.nextGame) {
     const latest = await ghGet(path);
     if (latest.sha !== sha) throw new Error('SHA競合：最新データを再取得してください。');
     const remote = JSON.parse(base64ToUtf8(latest.content));
-    if (legacyDrafts(remote).length && !options.removeDrafts) throw new Error('公開JSONに旧下書きがあります。先に「公開下書きをバックアップ・端末へ移行」を実行してください。');
+    if (legacyDrafts(remote).length) throw new Error('公開JSONに旧下書きが残っているため、保護のため保存を停止しました。管理者にデータの確認を依頼してください。');
     newDataObj = withoutDefaultOrder(newDataObj);
   }
   const content = utf8ToBase64(JSON.stringify(newDataObj, null, 2));
@@ -1271,7 +1269,7 @@ function collectNextGameForm() {
   };
 }
 
-// 下書きの正本はこのブラウザのみ。公開JSONの旧下書きは明示移行するまで保護する。
+// 下書きの正本はこのブラウザのみ。公開JSONの旧下書きが残っている場合は保存を停止して保護する。
 function localDraftKey() {
   return 'ffhp_nextgame_drafts_v1:' + JSON.stringify([CONFIG.owner, CONFIG.repo, CONFIG.branch]);
 }
@@ -1309,7 +1307,7 @@ function writeLocalDrafts(records) {
   readLocalDrafts();
   const text = draftBackupText(records);
   localStorage.setItem(localDraftKey(), text);
-  if (localStorage.getItem(localDraftKey()) !== text || JSON.stringify(readLocalDrafts()) !== JSON.stringify(records)) throw new Error('端末保存の読み戻し検証に失敗しました。公開下書きは削除しません。');
+  if (localStorage.getItem(localDraftKey()) !== text || JSON.stringify(readLocalDrafts()) !== JSON.stringify(records)) throw new Error('端末保存の読み戻し検証に失敗しました。');
 }
 function mergeLocalDrafts(incoming) {
   validateDraftRecords(incoming);
@@ -1331,52 +1329,11 @@ function stableDraftJson(value) {
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableDraftJson(value[k])).join(',') + '}';
   return JSON.stringify(value);
 }
-async function legacyDraftRecords(data) {
-  const counts = new Map();
-  const records = [];
-  for (const content of legacyDrafts(data)) {
-    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableDraftJson(content)));
-    const hash = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
-    const n = (counts.get(hash) || 0) + 1; counts.set(hash, n);
-    records.push({ id: `legacy-${hash}-${n}`, content });
-  }
-  return validateDraftRecords(records);
-}
 function downloadDraftBackup(records) {
   const url = URL.createObjectURL(new Blob([draftBackupText(records)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'fullface-nextgame-drafts.json';
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-let draftMigrationBusy = false;
-async function migratePublicDrafts(download = downloadDraftBackup, approve = confirm) {
-  if (draftMigrationBusy) return;
-  draftMigrationBusy = true;
-  try {
-    const latest = await ghGet(FILES.nextGame);
-    const data = JSON.parse(base64ToUtf8(latest.content));
-    const incoming = await legacyDraftRecords(data);
-    if (!incoming.length) { showStatus('ok', '移行する公開下書きはありません。'); return; }
-    download(incoming);
-    mergeLocalDrafts(incoming);
-    if (!approve(`${incoming.length}件の公開下書きをこのブラウザに保存・検証しました。バックアップJSONが保存されたことを確認してください。公開JSONから下書きを除去しますか？（過去のGit履歴は残ります）`)) { showStatus('ok', '端末へのコピーを保存しました。公開JSONは変更していません。'); return; }
-    // ダイアログ表示中に端末保存が消された場合も、削除より先に再検証する。
-    mergeLocalDrafts(incoming);
-    try {
-      const cleaned = withoutDefaultOrder(data);
-      const result = await ghPut(FILES.nextGame, cleaned, latest.sha, '下書きを端末へ移行し公開JSONから除去', { removeDrafts: true });
-      states.nextGame = { sha: result.content.sha, data: cleaned };
-    } catch (error) {
-      const newest = await ghGet(FILES.nextGame);
-      const actual = JSON.parse(base64ToUtf8(newest.content));
-      mergeLocalDrafts(await legacyDraftRecords(actual));
-      states.nextGame = { sha: newest.sha, data: actual };
-      if ('drafts' in actual || 'draft' in actual) throw new Error('保存は完了していません。最新の公開下書きも端末へ保護しました。再度移行してください。' + error.message);
-      // 応答消失でも、キー除去を最新JSONで確認できた場合だけ成功とする。
-    }
-    showStatus('ok', '公開JSONから下書きを除去しました。このブラウザの下書きは保持しています。');
-  } catch (error) { showStatus('err', '移行を停止しました：' + error.message); }
-  finally { draftMigrationBusy = false; renderDraftList(); renderNextGameStatus(); }
 }
 function exportLocalDrafts() {
   try { downloadDraftBackup(readLocalDrafts()); showStatus('ok', '下書きJSONをエクスポートしました。'); }
@@ -1390,7 +1347,6 @@ async function importLocalDrafts(event) {
   } catch (error) { showStatus('err', error.message); }
   finally { event.target.value = ''; }
 }
-document.getElementById('migrateDraftsBtn').addEventListener('click', () => migratePublicDrafts());
 document.getElementById('exportDraftsBtn').addEventListener('click', exportLocalDrafts);
 document.getElementById('importDraftsFile').addEventListener('change', importLocalDrafts);
 
@@ -1411,7 +1367,7 @@ function renderNextGameStatus() {
   try { draftCount = readLocalDrafts().length; } catch (_) { draftCount = '読み込み失敗'; }
   let html = `<p class="admin-note" style="margin:0 0 0.4rem;">🌐 現在サイトに公開中: <strong>${curLabel}</strong></p>`;
   html += `<p class="admin-note" style="margin:0;">📝 保存済みの下書き: ${draftCount}件</p>`;
-  if (data && legacyDrafts(data).length) html += '<p class="admin-note">公開JSONに旧下書きが残っています。バックアップ・端末への移行を行ってください。</p>';
+  if (data && legacyDrafts(data).length) html += '<p class="admin-note">公開JSONに旧下書きが残っています。保護のため次戦情報の保存を停止します。管理者にデータの確認を依頼してください。</p>';
   box.innerHTML = html;
 }
 
