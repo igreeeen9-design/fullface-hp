@@ -64,15 +64,15 @@
       },
       {
         "order": 9,
-        "name": "大淵",
-        "number": "25",
+        "name": "藤岡",
+        "number": "77",
         "position": "中",
-        "comment": "様子見"
+        "comment": ""
       }
     ],
     "bench": [],
     "note": "リーグ戦は最終戦です\n勝ちにいきましょう！",
-    "updatedAt": "2026-10-17T03:59:57.160Z",
+    "updatedAt": "2026-10-17T13:07:49.983Z",
     "scheduleGameId": "schedule-3"
   },
   "history": [
