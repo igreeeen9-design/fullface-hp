@@ -3,12 +3,76 @@
     "opponent": "Blue Bandits",
     "date": "2026-10-18",
     "startTime": "15:00",
-    "meetTime": "",
+    "meetTime": "14:00",
     "location": "大佐野スポーツ公園",
-    "lineup": [],
+    "lineup": [
+      {
+        "order": 1,
+        "name": "古賀",
+        "number": "16",
+        "position": "遊",
+        "comment": "リリーフあるね"
+      },
+      {
+        "order": 2,
+        "name": "中西",
+        "number": "4",
+        "position": "左",
+        "comment": ""
+      },
+      {
+        "order": 3,
+        "name": "高橋",
+        "number": "17",
+        "position": "二",
+        "comment": ""
+      },
+      {
+        "order": 4,
+        "name": "真鍋",
+        "number": "7",
+        "position": "三",
+        "comment": ""
+      },
+      {
+        "order": 5,
+        "name": "森",
+        "number": "6",
+        "position": "一",
+        "comment": ""
+      },
+      {
+        "order": 6,
+        "name": "道下",
+        "number": "13",
+        "position": "右",
+        "comment": ""
+      },
+      {
+        "order": 7,
+        "name": "井口",
+        "number": "1",
+        "position": "捕",
+        "comment": ""
+      },
+      {
+        "order": 8,
+        "name": "田中（敬）",
+        "number": "8",
+        "position": "投",
+        "comment": "真のエース"
+      },
+      {
+        "order": 9,
+        "name": "大淵",
+        "number": "25",
+        "position": "中",
+        "comment": "様子見"
+      }
+    ],
     "bench": [],
-    "note": "",
-    "updatedAt": "2026-10-04T07:53:58.367Z",
+    "note": "リーグ戦は最終戦です\n勝ちにいきましょう！",
+    "updatedAt": "2026-10-17T03:59:57.160Z",
     "scheduleGameId": "schedule-3"
   },
   "history": [
