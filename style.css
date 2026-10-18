@@ -645,8 +645,23 @@ img { max-width: 100%; display: block; }
 }
 
 .result-win {
-  color: #1a6b3c;
+  color: var(--navy);
   font-weight: 700;
+}
+
+.result-win-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid var(--navy);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy);
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .result-lose {
@@ -1485,6 +1500,12 @@ img { max-width: 100%; display: block; }
 
   .results-table > thead > tr > th:nth-child(6),
   .results-table > tbody > tr.result-row > td:nth-child(6) { width: 18%; }
+
+  /* 丸枠は狭い勝敗列でも収め、行の余白を増やさない。 */
+  .results-table > tbody > tr.result-row > td.result-win {
+    padding: 0.35rem 0;
+    text-align: center;
+  }
 
   /* 詳細ボタンは列幅に収まるよう、スマホでは少し小さくし、
      「詳細を見る」の「を見る」部分は省略して「詳細」のみ表示する(PCでは従来通り) */

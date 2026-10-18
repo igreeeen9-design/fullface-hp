@@ -453,7 +453,7 @@ function renderResultsGroup(group) {
               <td>${formatDateCell(g.dateLabel)}</td>
               <td>${escapeHtml(g.opponent)}</td>
               <td>${escapeHtml(g.score)}</td>
-              <td class="result-${escapeHtml(g.resultClass)}">${escapeHtml(g.resultLabel)}</td>
+              <td class="result-${escapeHtml(g.resultClass)}">${g.resultClass === 'win' ? `<span class="result-win-mark">${escapeHtml(g.resultLabel)}</span>` : escapeHtml(g.resultLabel)}</td>
               <td>${venueLink(g.venue)}</td>
               <td>${detailCell}</td>
             </tr>${detailRow}`;
