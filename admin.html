@@ -2240,7 +2240,7 @@ function parseGameCsv(rows, recordedDate) {
   restCells.forEach((cell) => {
     const half = zenkakuDigitsToHalf(cell);
     if (/^\d{1,2}\/\d{1,2}$/.test(half) || /^\d{4}-\d{2}-\d{2}$/.test(half)) date = half;
-    else if (/^\d{1,2}:\d{2}$/.test(half)) time = half;
+    else if (/^\d{1,2}:\d{2}\s*[〜～]?$/.test(half)) time = half.replace(/\s*[〜～]?$/, '');
     else if (cell.includes('リーグ戦') || cell.includes('交流戦')) group = cell.includes('交流戦') ? 'interleague' : 'league';
     else if (!venue) venue = cell;
   });
@@ -2821,8 +2821,12 @@ for (const id of ['csvImportMode', 'csvReplacementGame', 'csvFileInput']) {
   });
 }
 
+function renderCsvGameMetadata(imp) {
+  return `<p class="admin-note">対戦相手：${escapeAttr(imp.game.opponent)}<br>球場：${escapeAttr(imp.game.venue || '未設定')}<br>開始時間：${escapeAttr(imp.timeText || '未設定')}</p>`;
+}
+
 function renderCsvPreviewHtml(imp) {
-  if (imp.mode === 'replace') return `${imp.diffHtml || ''}<p class="admin-note">差し替え対象：${escapeAttr(imp.targetGameId)}（大会区分・確定参加者は保持）</p>
+  if (imp.mode === 'replace') return `${imp.diffHtml || ''}${renderCsvGameMetadata(imp)}<p class="admin-note">差し替え対象：${escapeAttr(imp.targetGameId)}（大会区分・確定参加者は保持）</p>
     <button type="button" class="admin-btn admin-btn-primary" id="csvCommitBtn" style="margin-top:1rem;">選択した試合を修正版CSVで差し替える</button><p class="admin-note" id="csvCommitNote"></p>`;
   const { game, playerStats, groupLabel, statsData } = imp;
   const newPlayers = [];
@@ -2843,7 +2847,7 @@ function renderCsvPreviewHtml(imp) {
   return `
     <div class="admin-note" style="background:#eef3f7; padding:0.8rem; border-radius:8px;">
       <strong>${escapeAttr(game.opponent)}</strong>(${escapeAttr(game.dateLabel)}・${escapeAttr(groupLabel)})<br>
-      ${escapeAttr(game.venue || '会場未設定')}${imp.timeText ? `・${escapeAttr(imp.timeText)}〜` : ''}<br>
+      球場：${escapeAttr(game.venue || '未設定')}<br>開始時間：${escapeAttr(imp.timeText || '未設定')}<br>
       スコア ${escapeAttr(game.score)}(${escapeAttr(game.resultLabel)})
     </div>
     <div class="csv-preview-table-wrap">
@@ -3380,6 +3384,7 @@ async function parsePostgameCsv(csvText) {
     imp.playerStats.map(player => `<details class="postgame-player"><summary>${escapeAttr(player.name)}：安打${player.stats.H}・打点${player.rbi}</summary><p>打席${player.stats.PA} ／ 打数${player.stats.AB} ／ 二塁打${player.stats.B2} ／ 三塁打${player.stats.B3} ／ 本塁打${player.stats.HR} ／ 盗塁${player.sb}</p></details>`).join('') +
     actualParticipantsHtml(imp, 'postgame') + (imp.diffHtml || '') + (imp.newImportHtml || '').replaceAll('csvConfirmSeparate', 'postgameConfirmSeparate');
   if (imp.mode === 'replace') postgame.preview = imp.diffHtml + actualParticipantsHtml(imp, 'postgame');
+  postgame.preview += renderCsvGameMetadata(imp);
   if (postgame.identityMismatch) postgame.preview = '<p role="alert">選択した試合とCSVの日付または相手名が異なります。</p><label><input type="checkbox" id="postgameIdentityConfirm">このCSVが選択した試合の記録であることを確認しました</label>' + postgame.preview;
   postgame.step = 3; postgame.uncertain = false; rememberPostgame();
 }

@@ -918,3 +918,21 @@ test('括弧統一のデータ移行は元CSVから再集計し、他選手を�
     assert.equal(fs.readFileSync(path.join(dir,'data/stats.json'),'utf8'), after);
   } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 });
+
+for (const time of ['15:00', '15:00〜', '15:00～', '15:00 ～']) test(`開始時間${time}を球場として誤認せず、成績は同じ`, () => {
+  const {context:c, imp}=setup();
+  const baseline=c.buildGameImportFromCsv(imp.csvText.replace('9:00,','15:00,'));
+  const built=c.buildGameImportFromCsv(imp.csvText.replace('9:00,',`${time},`));
+  assert.equal(built.timeText,'15:00');
+  assert.equal(built.game.venue,'北谷運動公園');
+  assert.deepEqual(clone(built),clone(baseline));
+});
+test('確認用の試合情報は相手・球場・開始時間を明記し、空欄とHTMLを安全に表示',()=>{
+  const {context:c,imp}=setup();
+  const html=c.renderCsvGameMetadata(imp);
+  assert.match(html,/対戦相手：Pana Spirits/);assert.match(html,/球場：北谷運動公園/);assert.match(html,/開始時間：9:00/);
+  const empty=c.renderCsvGameMetadata({game:{opponent:'<相手>',venue:''},timeText:''});
+  assert.match(empty,/&lt;相手&gt;/);assert.match(empty,/球場：未設定/);assert.match(empty,/開始時間：未設定/);
+  assert.match(c.renderCsvPreviewHtml({...imp,mode:'replace',diffHtml:'差分',targetGameId:'test'}),/開始時間：9:00/);
+  assert.match(script,/postgame\.preview \+= renderCsvGameMetadata\(imp\)/);
+});
