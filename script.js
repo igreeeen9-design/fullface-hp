@@ -115,7 +115,7 @@ function formatDateCell(str) {
 function formatResultDateCell(str) {
   const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})([（(][^）)]+[）)])?$/.exec(str || '');
   if (!match) return formatDateCell(str);
-  return `<span class="result-date-desktop">${formatDateCell(str)}</span><span class="result-date-mobile">${Number(match[2])}/${Number(match[3])}${match[4] ? `<br>${escapeHtml(match[4])}` : ''}</span>`;
+  return `<span class="result-date-desktop">${formatDateCell(str)}</span><span class="result-date-mobile">${match[2].padStart(2, '0')}/${match[3].padStart(2, '0')}${match[4] ? `<br>${escapeHtml(match[4])}` : ''}</span>`;
 }
 
 function formatDateOnly(dateStr) {
