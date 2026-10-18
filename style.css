@@ -881,6 +881,11 @@ img { max-width: 100%; display: block; }
   white-space: nowrap;
 }
 
+.season-totals tbody td {
+  color: #1f2937;
+  font-weight: 500;
+}
+
 /* Next Game */
 .next-game-badge {
   font-family: var(--font-display);
