@@ -38,3 +38,29 @@ test('表示時のみPA・AB・Hの降順に並べ替え、全項目同数なら
   assert.deepEqual(names, ['PA最多', '同数先', '同数後', 'H少', 'AB少', 'PA少']);
   assert.equal(JSON.stringify(players), before);
 });
+
+vm.runInContext(source.slice(source.indexOf('function formatRate('), source.indexOf('function renderPlayerStatsTable(')), context);
+function checkSeasonColumns(rows, reliable) {
+  const before = JSON.stringify(rows);
+  const html = context.renderSeasonTotalsTable(rows, reliable);
+  const headers = [...html.matchAll(/<th>(.*?)<\/th>/g)].map(m => m[1]);
+  assert.deepEqual(headers, ['選手名','試合',...(reliable ? ['打席'] : []),'打数','安打','打率','出塁率','二塁打','三塁打','本塁打','打点','得点','四球','死球','三振',...(reliable ? ['犠打','犠飛'] : []),'長打率']);
+  const values = [...html.matchAll(/<tr>\s*<td>([\s\S]*?)<\/tr>/g)].map(m => [...('<td>'+m[1]).matchAll(/<td>(.*?)<\/td>/g)].map(cell => cell[1]));
+  assert.equal(values.length, rows.length);
+  rows.forEach((p,i) => assert.deepEqual(values[i], [context.escapeHtml(p.name),p.GP,...(reliable?[p.PA]:[]),p.AB,p.H,context.formatRate(p.H,p.AB),context.formatRate(p.H+p.BB+p.HBP,p.AB+p.BB+p.HBP),p.B2,p.B3,p.HR,p.RBI,p.Runs,p.BB,p.HBP,p.SO,...(reliable?[p.SH,p.SF]:[]),context.formatRate(p.B1+2*p.B2+3*p.B3+4*p.HR,p.AB)].map(String)));
+  assert.equal(JSON.stringify(rows), before);
+}
+test('過去成績は条件付きの打席・犠打・犠飛を保ち、すべての列と値が対応する',()=>{
+  const p={name:'確認',GP:1,PA:20,AB:15,H:8,B1:4,B2:2,B3:1,HR:1,RBI:6,Runs:7,BB:3,HBP:2,SO:5,SH:1,SF:2};
+  for(const reliable of [false,true]) checkSeasonColumns([p],reliable);
+});
+test('2023〜2025年の全選手で列と値が対応し、表示順・元データを維持する',()=>{
+  const results=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/results.json'),'utf8'));
+  const before=JSON.stringify(results);
+  for(const year of ['2023','2024','2025']) {
+    const groups=results.groups.filter(g=>g.era==='history' && g.title.includes(year));
+    assert.ok(groups.length,year);
+    for(const group of groups){const {rows,hasReliablePA}=context.aggregateBoxscoreSeason(group);assert.ok(rows.length);checkSeasonColumns(rows,hasReliablePA);}
+  }
+  assert.equal(JSON.stringify(results),before);
+});

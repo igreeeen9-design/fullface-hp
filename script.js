@@ -596,6 +596,8 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
               ${hasReliablePA ? `<td>${p.PA}</td>` : ''}
               <td>${p.AB}</td>
               <td>${p.H}</td>
+              <td>${avg}</td>
+              <td>${obp}</td>
               <td>${p.B2}</td>
               <td>${p.B3}</td>
               <td>${p.HR}</td>
@@ -605,8 +607,6 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
               <td>${p.HBP}</td>
               <td>${p.SO}</td>
               ${hasReliablePA ? `<td>${p.SH}</td><td>${p.SF}</td>` : ''}
-              <td>${avg}</td>
-              <td>${obp}</td>
               <td>${slg}</td>
             </tr>`;
   }).join('');
@@ -618,10 +618,10 @@ function renderSeasonTotalsTable(rows, hasReliablePA) {
               <th>選手名</th>
               <th>試合</th>
               ${hasReliablePA ? '<th>打席</th>' : ''}
-              <th>打数</th><th>安打</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
+              <th>打数</th><th>安打</th><th>打率</th><th>出塁率</th><th>二塁打</th><th>三塁打</th><th>本塁打</th>
               <th>打点</th><th>得点</th><th>四球</th><th>死球</th><th>三振</th>
               ${hasReliablePA ? '<th>犠打</th><th>犠飛</th>' : ''}
-              <th>打率</th><th>出塁率</th><th>長打率</th>
+              <th>長打率</th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
