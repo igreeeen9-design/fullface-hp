@@ -231,37 +231,76 @@ function renderHeroNextGame(data) {
 }
 
 // 次戦と試合日程で同じ取得結果を参照し、参加予定の表示を一致させる。
-const scheduleDataRequest = loadJson('data/schedule.json').catch(() => null);
-const nextGameDataRequest = loadJson('data/next-game.json').catch(() => null);
+let jsonRequestSequence = 0;
+let upcomingRequestId = 0;
+let upcomingSnapshot = null;
+let upcomingRefreshTimer;
 
 async function loadNextGame() {
+  const requestId = ++upcomingRequestId;
   const container = document.getElementById('nextGameContent');
+  const scheduleEl = document.getElementById('scheduleContent');
   try {
-    const [data, schedule] = await Promise.all([nextGameDataRequest, scheduleDataRequest]);
-    if (!data) throw new Error('failed to load next-game.json');
+    const [data, schedule] = await Promise.all([
+      loadJson('data/next-game.json', { cacheBust: true }),
+      loadJson('data/schedule.json', { cacheBust: true }),
+    ]);
+    // 遅れて届いた古いリクエストで、新しい表示を上書きしない。
+    if (requestId !== upcomingRequestId) return;
+    const snapshot = JSON.stringify([data, schedule]);
+    if (snapshot === upcomingSnapshot) return;
+    const expandedIds = new Set(Array.from(scheduleEl?.querySelectorAll('[data-schedule-id][aria-expanded="true"]') || [], el => el.dataset.scheduleId));
     const current = data.current || {};
-    const attendance = nextGameAttendance(schedule ? schedule.games || [] : [], current);
+    const attendance = nextGameAttendance(schedule.games || [], current);
     if (container) renderNextGame(container, { ...data, current: { ...current, attendance } });
     renderHeroNextGame(data);
-    // 天気予報は外部APIに依存するため、失敗しても次戦情報の表示には影響させない
+    if (scheduleEl) {
+      renderSchedule(scheduleEl, schedule, current);
+      scheduleEl.querySelectorAll('[data-schedule-id]').forEach(button => {
+        if (!button.dataset.scheduleId || !expandedIds.has(button.dataset.scheduleId)) return;
+        button.setAttribute('aria-expanded', 'true');
+        const detail = scheduleEl.querySelector(`#schedule-attendance-${button.dataset.scheduleToggle}`);
+        if (detail) detail.hidden = false;
+      });
+    }
+    upcomingSnapshot = snapshot;
     if (typeof renderGameWeather === 'function') {
       renderGameWeather(document.getElementById('nextGameWeather'), current).catch(() => {});
     }
   } catch (e) {
-    if (container) container.innerHTML = '<p class="placeholder-note">次戦情報の読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
+    // 復帰時の通信失敗では、表示中の情報を消さない。
+    if (requestId !== upcomingRequestId || upcomingSnapshot !== null) return;
+    const note = '<p class="placeholder-note">データの読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
+    if (container) container.innerHTML = note;
+    if (scheduleEl) scheduleEl.innerHTML = note;
     const heroEl = document.getElementById('heroNextGame');
-    if (heroEl) heroEl.innerHTML = '<p class="hero-next-game-empty">次戦情報の読み込みに失敗しました。</p>';
+    if (heroEl) heroEl.innerHTML = note;
   }
 }
 
+function refreshUpcomingOnReturn() {
+  if (document.visibilityState !== 'visible') return;
+  clearTimeout(upcomingRefreshTimer);
+  upcomingRefreshTimer = setTimeout(() => {
+    if (document.visibilityState === 'visible') loadNextGame();
+  }, 100);
+}
+window.addEventListener('pageshow', event => {
+  if (event.persisted) refreshUpcomingOnReturn();
+});
+document.addEventListener('visibilitychange', refreshUpcomingOnReturn);
 loadNextGame();
 
 /* ---- 試合日程・試合結果・過去の成績・個人成績(data/*.json を読み込んで表示) ---- */
 
 const ERROR_NOTE = '<p class="placeholder-note">データの読み込みに失敗しました。しばらくしてから再度お試しください。</p>';
 
-async function loadJson(url) {
-  const res = await fetch(url, { cache: 'no-store' });
+async function loadJson(url, { cacheBust = false } = {}) {
+  // 同一ミリ秒の再取得でも別URLにする。対象は呼び出し側で明示する。
+  const requestUrl = cacheBust
+    ? `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}-${++jsonRequestSequence}`
+    : url;
+  const res = await fetch(requestUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error(`failed to load ${url}`);
   return res.json();
 }
@@ -277,7 +316,7 @@ function renderSchedule(container, data, current = null) {
     const attendance = scheduleGameAttendance(g, games, current);
     const label = attendance ? `参加予定 ${attendance.members.length}人` : '参加予定 未設定';
     const opponent = confirmed
-      ? `<button type="button" class="schedule-attendance-toggle" data-schedule-toggle="${index}" aria-expanded="false" aria-controls="schedule-attendance-${index}">
+      ? `<button type="button" class="schedule-attendance-toggle" data-schedule-toggle="${index}" data-schedule-id="${escapeHtml(g.id || '')}" aria-expanded="false" aria-controls="schedule-attendance-${index}">
           <span>${escapeHtml(g.opponent)}</span><span class="attendance-badge">${label}</span><span class="schedule-chevron" aria-hidden="true">▾</span>
         </button>` : escapeHtml(g.opponent);
     return `<tr>
@@ -762,21 +801,10 @@ function renderPlayers(container, statsData, statsFailed, resultsData) {
 }
 
 async function loadSiteData() {
-  const scheduleEl = document.getElementById('scheduleContent');
   const resultsEl = document.getElementById('resultsContent');
   const historyEl = document.getElementById('historyContent');
   const playersEl = document.getElementById('playersContent');
   const rosterEl = document.getElementById('rosterContent');
-
-  if (scheduleEl) {
-    try {
-      const [schedule, nextGame] = await Promise.all([scheduleDataRequest, nextGameDataRequest]);
-      if (!schedule) throw new Error('failed to load schedule.json');
-      renderSchedule(scheduleEl, schedule, nextGame && nextGame.current);
-    } catch (e) {
-      scheduleEl.innerHTML = ERROR_NOTE;
-    }
-  }
 
   let resultsData = null;
   let resultsFailed = false;
