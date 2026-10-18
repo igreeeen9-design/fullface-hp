@@ -644,6 +644,8 @@ img { max-width: 100%; display: block; }
   margin-top: 0;
 }
 
+.result-date-mobile { display: none; }
+
 .result-win {
   color: var(--navy);
   font-weight: 700;
@@ -1483,40 +1485,41 @@ img { max-width: 100%; display: block; }
     table-layout: fixed;
   }
 
+  .results-table > thead > tr > th,
+  .results-table > tbody > tr.result-row > td {
+    padding: 0.55rem 0.2rem;
+  }
   .results-table > thead > tr > th:nth-child(1),
-  .results-table > tbody > tr.result-row > td:nth-child(1) { width: 19%; }
-
+  .results-table > tbody > tr.result-row > td:nth-child(1) { width: 13%; }
   .results-table > thead > tr > th:nth-child(2),
-  .results-table > tbody > tr.result-row > td:nth-child(2) { width: 23%; }
-
+  .results-table > tbody > tr.result-row > td:nth-child(2) { width: 28%; overflow-wrap: anywhere; }
   .results-table > thead > tr > th:nth-child(3),
-  .results-table > tbody > tr.result-row > td:nth-child(3) { width: 12%; }
-
+  .results-table > tbody > tr.result-row > td:nth-child(3) { width: 15%; white-space: nowrap; }
   .results-table > thead > tr > th:nth-child(4),
-  .results-table > tbody > tr.result-row > td:nth-child(4) { width: 9%; }
-
+  .results-table > tbody > tr.result-row > td:nth-child(4) { width: 10%; white-space: nowrap; text-align: center; padding-inline: 0; }
   .results-table > thead > tr > th:nth-child(5),
-  .results-table > tbody > tr.result-row > td:nth-child(5) { width: 19%; }
-
+  .results-table > tbody > tr.result-row > td:nth-child(5) { width: 22%; overflow-wrap: anywhere; }
   .results-table > thead > tr > th:nth-child(6),
-  .results-table > tbody > tr.result-row > td:nth-child(6) { width: 18%; }
+  .results-table > tbody > tr.result-row > td:nth-child(6) { width: 12%; white-space: nowrap; text-align: center; padding-inline: 0; }
 
-  /* 丸枠は狭い勝敗列でも収め、行の余白を増やさない。 */
-  .results-table > tbody > tr.result-row > td.result-win {
-    padding: 0.35rem 0;
-    text-align: center;
-  }
+  .result-date-desktop { display: none; }
+  .result-date-mobile { display: inline-block; white-space: nowrap; }
 
-  /* 詳細ボタンは列幅に収まるよう、スマホでは少し小さくし、
-     「詳細を見る」の「を見る」部分は省略して「詳細」のみ表示する(PCでは従来通り) */
   .results-table .detail-toggle {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.7rem;
+    width: 100%;
+    min-height: 44px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--navy);
+    min-width: 0;
+    padding: 0;
+    font-size: 0.65rem;
+    white-space: nowrap;
   }
-
-  .results-table .detail-toggle-suffix {
-    display: none;
-  }
+  .results-table .detail-toggle:hover { background: transparent; color: var(--navy); }
+  .results-table .detail-toggle::after { content: " ＞"; }
+  .results-table .detail-toggle-suffix { display: none; }
 
   .raw-data-toggle {
     font-size: 0.66rem;
@@ -1607,4 +1610,19 @@ img { max-width: 100%; display: block; }
   .schedule-table th:nth-child(4) { width: 16%; }
   .schedule-attendance-toggle > span:first-child { overflow-wrap: anywhere; }
   .schedule-table .attendance-badge { font-size: .7rem; padding-inline: .3rem; }
+}
+
+@media (max-width: 360px) {
+  .results-table > thead > tr > th { font-size: 0.65rem; white-space: nowrap; }
+  .results-table > tbody > tr.result-row > td { font-size: 0.75rem; padding-inline: 0.1rem; }
+  .results-table > thead > tr > th:nth-child(1),
+  .results-table > tbody > tr.result-row > td:nth-child(1) { width: 15%; }
+  .results-table > thead > tr > th:nth-child(2),
+  .results-table > tbody > tr.result-row > td:nth-child(2) { width: 27%; }
+  .results-table > thead > tr > th:nth-child(3),
+  .results-table > tbody > tr.result-row > td:nth-child(3) { width: 16%; }
+  .results-table > thead > tr > th:nth-child(4),
+  .results-table > tbody > tr.result-row > td:nth-child(4) { width: 11%; padding-inline: 0; }
+  .results-table > thead > tr > th:nth-child(5),
+  .results-table > tbody > tr.result-row > td:nth-child(5) { width: 19%; }
 }

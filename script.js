@@ -112,6 +112,12 @@ function formatDateCell(str) {
   return escapeHtml(str).replace('(', '<wbr>(').replace(/\//g, '/<wbr>');
 }
 
+function formatResultDateCell(str) {
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})([（(][^）)]+[）)])?$/.exec(str || '');
+  if (!match) return formatDateCell(str);
+  return `<span class="result-date-desktop">${formatDateCell(str)}</span><span class="result-date-mobile">${Number(match[2])}/${Number(match[3])}${match[4] ? `<br>${escapeHtml(match[4])}` : ''}</span>`;
+}
+
 function formatDateOnly(dateStr) {
   const m = dateStr && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!m) return null;
@@ -450,7 +456,7 @@ function renderResultsGroup(group) {
             </tr>` : '';
     return `
             <tr class="result-row">
-              <td>${formatDateCell(g.dateLabel)}</td>
+              <td>${formatResultDateCell(g.dateLabel)}</td>
               <td>${escapeHtml(g.opponent)}</td>
               <td>${escapeHtml(g.score)}</td>
               <td class="result-${escapeHtml(g.resultClass)}">${g.resultClass === 'win' ? `<span class="result-win-mark">${escapeHtml(g.resultLabel)}</span>` : escapeHtml(g.resultLabel)}</td>

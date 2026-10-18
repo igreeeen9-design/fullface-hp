@@ -64,3 +64,11 @@ test('2023〜2025年の全選手で列と値が対応し、表示順・元デー
   }
   assert.equal(JSON.stringify(results),before);
 });
+
+vm.runInContext(source.slice(source.indexOf('function formatDateCell('),source.indexOf('function formatDateOnly(')),context);
+test('試合結果の日付はスマホ用M/Dと曜日の2行、PC用の年を保持する',()=>{
+  const html=context.formatResultDateCell('2026/09/27(日)');
+  assert.match(html,/result-date-mobile">9\/27<br>\(日\)<\/span>/);
+  assert.match(html,/2026\/<wbr>09\/<wbr>27/);
+  assert.equal(context.formatResultDateCell('未定'),'未定');
+});
