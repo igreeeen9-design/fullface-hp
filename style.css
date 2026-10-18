@@ -1499,6 +1499,7 @@ img { max-width: 100%; display: block; }
   .results-table > tbody > tr.result-row > td:nth-child(4) { width: 10%; white-space: nowrap; text-align: center; padding-inline: 0; }
   .results-table > thead > tr > th:nth-child(5),
   .results-table > tbody > tr.result-row > td:nth-child(5) { width: 22%; overflow-wrap: anywhere; }
+  .results-table > thead > tr > th:nth-child(5) { text-align: center; }
   .results-table > thead > tr > th:nth-child(6),
   .results-table > tbody > tr.result-row > td:nth-child(6) { width: 12%; white-space: nowrap; text-align: center; padding-inline: 0; }
 
