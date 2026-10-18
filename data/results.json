@@ -11,11 +11,11 @@
         {
           "date": "2026-10-18",
           "dateLabel": "2026/10/18(日)",
-          "opponent": "ブルバン",
+          "opponent": "Blue Bandits",
           "score": "3 - 4",
           "resultLabel": "敗",
           "resultClass": "lose",
-          "venue": "15:00〜",
+          "venue": "大佐野スポーツ公園",
           "detail": {
             "type": "linescore",
             "innings": [
@@ -29,7 +29,7 @@
             ],
             "rows": [
               {
-                "team": "ブルバン",
+                "team": "Blue Bandits",
                 "values": [
                   "2",
                   "0",
